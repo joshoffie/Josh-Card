@@ -1,10 +1,34 @@
 import Database from "better-sqlite3";
 import { createHmac } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { config } from "dotenv";
 
 config();
+
+// ---------------------------------------------------------------------------
+// Bootstrap certs from Base64 env vars (Railway / Docker)
+// If *_B64 vars exist, decode them to /tmp/certs/ and use those paths.
+// Falls back to file paths for local dev with certs/ directory.
+// ---------------------------------------------------------------------------
+const CERT_DIR = "/tmp/certs";
+
+function b64ToFile(envVar, filename) {
+  const b64 = process.env[envVar];
+  if (!b64) return null;
+  mkdirSync(CERT_DIR, { recursive: true });
+  const outPath = resolve(CERT_DIR, filename);
+  writeFileSync(outPath, Buffer.from(b64, "base64"));
+  console.log(`  Decoded ${envVar} → ${outPath}`);
+  return outPath;
+}
+
+const certPaths = {
+  signerCert: b64ToFile("SIGNER_CERT_B64", "signerCert.pem"),
+  signerKey:  b64ToFile("SIGNER_KEY_B64",  "signerKey.pem"),
+  wwdr:       b64ToFile("WWDR_CERT_B64",   "wwdr.pem"),
+  apnsKey:    b64ToFile("APNS_KEY_B64",    "APNsAuthKey.p8"),
+};
 
 // ---------------------------------------------------------------------------
 // Config
@@ -12,11 +36,11 @@ config();
 export const CFG = {
   passTypeId:     process.env.PASS_TYPE_ID,
   teamId:         process.env.TEAM_ID,
-  signerCert:     resolve(process.env.SIGNER_CERT  || "certs/signerCert.pem"),
-  signerKey:      resolve(process.env.SIGNER_KEY   || "certs/signerKey.pem"),
+  signerCert:     certPaths.signerCert || resolve(process.env.SIGNER_CERT  || "certs/signerCert.pem"),
+  signerKey:      certPaths.signerKey  || resolve(process.env.SIGNER_KEY   || "certs/signerKey.pem"),
   signerPass:     process.env.SIGNER_PASSPHRASE    || "",
-  wwdr:           resolve(process.env.WWDR_CERT     || "certs/wwdr.pem"),
-  apnsKeyPath:    resolve(process.env.APNS_KEY_PATH || "certs/APNsAuthKey.p8"),
+  wwdr:           certPaths.wwdr       || resolve(process.env.WWDR_CERT     || "certs/wwdr.pem"),
+  apnsKeyPath:    certPaths.apnsKey    || resolve(process.env.APNS_KEY_PATH || "certs/APNsAuthKey.p8"),
   apnsKeyId:      process.env.APNS_KEY_ID,
   apnsHost:       process.env.APNS_HOST || "https://api.push.apple.com",
   port:           parseInt(process.env.PORT || "3000", 10),
