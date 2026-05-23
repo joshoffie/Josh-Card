@@ -27,6 +27,70 @@ app.get("/health", (_req, res) => {
 // JOSH'S ENDPOINTS
 // =========================================================================
 
+// --- Fan signup page (QR code destination) --------------------------------
+app.get("/join", (req, res) => {
+  const artistName = CFG.artistName;
+  res.send(`<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escHtml(artistName)} — Get Your Card</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0a0a0a; color: #e0e0e0; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
+    .container { width: 100%; max-width: 380px; }
+    .header { text-align: center; margin-bottom: 2rem; }
+    .header h1 { font-size: 1.5rem; color: #fff; margin-bottom: 0.3rem; }
+    .header p { font-size: 0.85rem; color: #666; }
+    .form-card { background: #161616; border: 1px solid #2a2a2a; border-radius: 14px;
+      padding: 1.5rem; }
+    label { display: block; font-size: 0.75rem; color: #888; text-transform: uppercase;
+      letter-spacing: 0.08em; margin-bottom: 0.3rem; }
+    input { width: 100%; padding: 0.75rem; border-radius: 8px; border: 1px solid #333;
+      background: #222; color: #fff; font-size: 1rem; margin-bottom: 1rem;
+      font-family: inherit; -webkit-appearance: none; }
+    input::placeholder { color: #555; }
+    input:focus { outline: none; border-color: #555; }
+    .btn { width: 100%; padding: 0.9rem; border-radius: 10px; border: none;
+      background: #fff; color: #000; font-weight: 600; font-size: 1.05rem;
+      cursor: pointer; transition: opacity 0.2s; -webkit-appearance: none; }
+    .btn:hover { opacity: 0.85; }
+    .btn:active { opacity: 0.7; }
+    .note { text-align: center; font-size: 0.75rem; color: #444; margin-top: 1.5rem;
+      line-height: 1.5; }
+    .wallet-icon { display: inline-block; width: 20px; height: 20px;
+      vertical-align: middle; margin-right: 0.3rem; }
+  </style>
+</head><body>
+  <div class="container">
+    <div class="header">
+      <h1>${escHtml(artistName)}</h1>
+      <p>Get your fan card</p>
+    </div>
+    <div class="form-card">
+      <form id="joinForm">
+        <label>Your Name</label>
+        <input type="text" name="name" placeholder="First name" required autofocus autocomplete="given-name">
+        <label>Email</label>
+        <input type="email" name="email" placeholder="you@email.com" required autocomplete="email">
+        <button type="submit" class="btn">Add to Apple Wallet</button>
+      </form>
+    </div>
+    <p class="note">Free. No app needed. Card goes straight to your iPhone wallet<br>with exclusive access and lock-screen updates.</p>
+  </div>
+  <script>
+    document.getElementById("joinForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const name = encodeURIComponent(this.name.value.trim());
+      const email = encodeURIComponent(this.email.value.trim());
+      if (!name) return;
+      window.location.href = "/issue?name=" + name + "&email=" + email + "&source=qr";
+    });
+  </script>
+</body></html>`);
+});
+
 // --- Issue a new pass ---------------------------------------------------
 // GET /issue?name=...&email=...&source=...
 app.get("/issue", async (req, res) => {
