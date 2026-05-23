@@ -68,8 +68,8 @@ export default async function buildPkpass({ name, email, serial, source }) {
     }
   );
 
-  // Pass type
-  pkpass.type = "generic";
+  // Pass type — storeCard supports strip images
+  pkpass.type = "storeCard";
 
   // --- Images ---
   for (const [filename, buf] of Object.entries(images)) {
