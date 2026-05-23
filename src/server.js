@@ -72,8 +72,8 @@ app.get("/join", (req, res) => {
       <form id="joinForm">
         <label>Your Name</label>
         <input type="text" name="name" placeholder="First name" required autofocus autocomplete="given-name">
-        <label>Email</label>
-        <input type="email" name="email" placeholder="you@email.com" required autocomplete="email">
+        <label>Email <span style="color:#555; text-transform:none; letter-spacing:0;">(optional)</span></label>
+        <input type="email" name="email" placeholder="you@email.com" autocomplete="email">
         <button type="submit" class="btn">Add to Apple Wallet</button>
       </form>
     </div>
