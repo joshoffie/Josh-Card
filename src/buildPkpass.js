@@ -4,11 +4,18 @@ import { resolve } from "node:path";
 import { CFG, authTokenFor, getCurrentContent } from "./store.js";
 
 // ---------------------------------------------------------------------------
-// Load signing materials once
+// Load signing materials lazily (so server boots even without certs)
 // ---------------------------------------------------------------------------
-const signerCert = readFileSync(CFG.signerCert);
-const signerKey  = readFileSync(CFG.signerKey);
-const wwdr       = readFileSync(CFG.wwdr);
+let _signerCert, _signerKey, _wwdr;
+
+function loadCerts() {
+  if (!_signerCert) {
+    _signerCert = readFileSync(CFG.signerCert);
+    _signerKey  = readFileSync(CFG.signerKey);
+    _wwdr       = readFileSync(CFG.wwdr);
+  }
+  return { signerCert: _signerCert, signerKey: _signerKey, wwdr: _wwdr };
+}
 
 // ---------------------------------------------------------------------------
 // Image buffers — loaded once from pass-template/
@@ -37,13 +44,15 @@ export default async function buildPkpass({ name, email, serial, source }) {
   const authToken = authTokenFor(serial);
   const secretUrl = `${CFG.webServiceUrl}/secret/${authToken}`;
 
+  const certs = loadCerts();
+
   const pkpass = new PKPass(
     {},  // no template directory — we add buffers manually
     {
-      signerCert,
-      signerKey,
+      signerCert: certs.signerCert,
+      signerKey: certs.signerKey,
       signerKeyPassphrase: CFG.signerPass || undefined,
-      wwdr,
+      wwdr: certs.wwdr,
     },
     {
       serialNumber:        serial,
