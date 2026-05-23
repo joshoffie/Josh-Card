@@ -116,8 +116,8 @@ function requireAdmin(req, res, next) {
   return res.send(renderAdminLogin("Wrong password"));
 }
 
-app.use("/admin", requireAdmin);
 app.use("/admin", express.urlencoded({ extended: false }));
+app.use("/admin", requireAdmin);
 
 app.get("/admin", (req, res) => {
   const fans = db.prepare("SELECT COUNT(*) as c FROM passes").get().c;
@@ -454,7 +454,7 @@ function renderAdminLogin(error = "") {
   <div class="box">
     <h1>Admin</h1>
     ${error ? `<p class="err">${escHtml(error)}</p>` : ""}
-    <form method="POST" action="/admin?_pw=">
+    <form method="POST" action="/admin">
       <input type="password" name="password" placeholder="Password" autofocus>
       <button type="submit">Login</button>
     </form>
