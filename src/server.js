@@ -70,10 +70,8 @@ app.get("/join", (req, res) => {
     </div>
     <div class="form-card">
       <form id="joinForm">
-        <label>Your Name</label>
-        <input type="text" name="name" placeholder="First name" required autofocus autocomplete="given-name">
-        <label>Email <span style="color:#555; text-transform:none; letter-spacing:0;">(optional)</span></label>
-        <input type="email" name="email" placeholder="you@email.com" autocomplete="email">
+        <label>First Name</label>
+        <input type="text" name="name" placeholder="Your name" required autofocus autocomplete="given-name">
         <button type="submit" class="btn">Add to Apple Wallet</button>
       </form>
     </div>
@@ -83,9 +81,8 @@ app.get("/join", (req, res) => {
     document.getElementById("joinForm").addEventListener("submit", function(e) {
       e.preventDefault();
       const name = encodeURIComponent(this.name.value.trim());
-      const email = encodeURIComponent(this.email.value.trim());
       if (!name) return;
-      window.location.href = "/issue?name=" + name + "&email=" + email + "&source=qr";
+      window.location.href = "/issue?name=" + name + "&source=qr";
     });
   </script>
 </body></html>`);
