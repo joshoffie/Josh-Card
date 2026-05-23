@@ -86,6 +86,15 @@ db.exec(`
   );
 
   INSERT OR IGNORE INTO content (id) VALUES (1);
+
+  CREATE TABLE IF NOT EXISTS posts (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_type    TEXT NOT NULL DEFAULT 'text',
+    title        TEXT DEFAULT '',
+    body         TEXT DEFAULT '',
+    media_url    TEXT DEFAULT '',
+    created_at   TEXT DEFAULT (datetime('now'))
+  );
 `);
 
 // ---------------------------------------------------------------------------
@@ -187,4 +196,29 @@ export function getCurrentContent() {
 
 export function setContent(latestDrop, dropDate, listenUrl, message) {
   updateContent.run(latestDrop, dropDate, listenUrl, message);
+}
+
+// ---------------------------------------------------------------------------
+// Posts (fan-only blog feed)
+// ---------------------------------------------------------------------------
+const insertPost = db.prepare(`
+  INSERT INTO posts (post_type, title, body, media_url) VALUES (?, ?, ?, ?)
+`);
+const listPosts = db.prepare(
+  "SELECT * FROM posts ORDER BY created_at DESC LIMIT ?"
+);
+const deletePost = db.prepare("DELETE FROM posts WHERE id = ?");
+const getPost = db.prepare("SELECT * FROM posts WHERE id = ?");
+
+export function createPost(postType, title, body, mediaUrl) {
+  const info = insertPost.run(postType, title, body, mediaUrl || "");
+  return getPost.get(info.lastInsertRowid);
+}
+
+export function getPosts(limit = 50) {
+  return listPosts.all(limit);
+}
+
+export function removePost(id) {
+  return deletePost.run(id);
 }
