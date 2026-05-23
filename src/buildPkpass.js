@@ -108,11 +108,6 @@ export default async function buildPkpass({ name, email, serial, source }) {
   // --- Back of card ---
   pkpass.backFields.push(
     {
-      key: "fanEmail",
-      label: "Email",
-      value: email || "",
-    },
-    {
       key: "exclusiveLink",
       label: "Fans Only",
       value: secretUrl,
