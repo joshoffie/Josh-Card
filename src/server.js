@@ -119,6 +119,11 @@ function requireAdmin(req, res, next) {
 app.use("/admin", express.urlencoded({ extended: false }));
 app.use("/admin", requireAdmin);
 
+// POST /admin handles login — middleware sets cookie, then redirect to GET
+app.post("/admin", (req, res) => {
+  res.redirect("/admin");
+});
+
 app.get("/admin", (req, res) => {
   const fans = db.prepare("SELECT COUNT(*) as c FROM passes").get().c;
   const devices = db.prepare("SELECT COUNT(DISTINCT push_token) as c FROM registrations").get().c;
