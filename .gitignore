@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.pkpass
+*.p8
+*.p12
+*.pem
+certs/
+data/
+!certs/.gitkeep

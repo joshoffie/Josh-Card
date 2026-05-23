@@ -1,0 +1,22 @@
+{
+  "name": "fan-wallet",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Apple Wallet fan card — issue passes, push updates, exclusive content",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "issue": "node -e \"import('./src/buildPkpass.js').then(m => m.default({name:'Test Fan',email:'test@example.com',serial:'test-001'}).then(b => {import('fs').then(fs => fs.writeFileSync('test.pkpass',b)); console.log('wrote test.pkpass');}))\"",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "passkit-generator": "^3.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
