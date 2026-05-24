@@ -232,7 +232,7 @@
     }
 
     function renderComments(slug) {
-      return `<div class="comments-section">
+      return `<div class="comments-section" onclick="event.stopPropagation()">
         <div id="comments-${slug}">
           <div class="comments-list" id="clist-${slug}"></div>
           <div class="comment-form" id="cform-${slug}">
