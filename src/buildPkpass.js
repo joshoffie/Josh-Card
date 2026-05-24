@@ -60,9 +60,9 @@ export default async function buildPkpass({ name, email, serial, source }) {
       teamIdentifier:      CFG.teamId,
       organizationName:    CFG.artistName,
       description:         `${CFG.artistName} Fan Card`,
-      foregroundColor:     "rgb(255, 255, 255)",
-      backgroundColor:     "rgb(20, 20, 20)",
-      labelColor:          "rgb(180, 180, 180)",
+      foregroundColor:     "rgb(0, 0, 0)",
+      backgroundColor:     "rgb(251, 242, 234)",
+      labelColor:          "rgb(80, 80, 80)",
       webServiceURL:       CFG.webServiceUrl,
       authenticationToken: authToken,
     }
