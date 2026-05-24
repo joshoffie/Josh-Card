@@ -1,4 +1,6 @@
 import express from "express";
+import multer from "multer";
+import { v2 as cloudinary } from "cloudinary";
 import { resolve } from "node:path";
 import {
   CFG, db,
@@ -17,6 +19,14 @@ const app = express();
 app.use(express.json());
 app.use("/public", express.static(resolve("public")));
 
+// Cloudinary config
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
 // CORS for GitHub Pages blog
 app.use("/api/comments", (req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -27,8 +37,15 @@ app.use("/api/comments", (req, res, next) => {
 });
 app.use("/api/posts", (req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+app.use("/api/upload", (req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
 });
@@ -47,6 +64,73 @@ app.get("/api/posts", (req, res) => {
     mediaUrl: p.media_url || "",
   }));
   res.json(formatted);
+});
+
+// Admin: create post with optional media (from blog drag-and-drop)
+app.post("/api/posts", upload.array("media", 20), async (req, res) => {
+  const pw = req.headers.authorization;
+  if (pw !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: "unauthorized" });
+
+  const { title, body, type } = req.body;
+  const files = req.files || [];
+  const urls = [];
+
+  // Upload each file to Cloudinary
+  for (const file of files) {
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const resourceType = file.mimetype.startsWith("video/") ? "video" : "image";
+        const stream = cloudinary.uploader.upload_stream(
+          { resource_type: resourceType, folder: "josh-blog" },
+          (err, result) => err ? reject(err) : resolve(result)
+        );
+        stream.end(file.buffer);
+      });
+      urls.push(result.secure_url);
+    } catch (e) {
+      console.error("Cloudinary upload error:", e.message);
+    }
+  }
+
+  // Determine post type
+  let postType = type || "text";
+  if (!type && urls.length) {
+    const firstFile = files[0];
+    postType = firstFile.mimetype.startsWith("video/") ? "video" : "image";
+  }
+
+  // For multiple images, store as JSON array in media_url
+  const mediaUrl = urls.length === 1 ? urls[0] : urls.length > 1 ? JSON.stringify(urls) : "";
+
+  const post = createPost(postType, title || "", body || "", mediaUrl);
+  res.status(201).json({ ...post, urls });
+});
+
+// Admin: upload media files only (returns URLs)
+app.post("/api/upload", upload.array("media", 20), async (req, res) => {
+  const pw = req.headers.authorization;
+  if (pw !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: "unauthorized" });
+
+  const files = req.files || [];
+  if (!files.length) return res.status(400).json({ error: "no files" });
+
+  const urls = [];
+  for (const file of files) {
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const resourceType = file.mimetype.startsWith("video/") ? "video" : "image";
+        const stream = cloudinary.uploader.upload_stream(
+          { resource_type: resourceType, folder: "josh-blog" },
+          (err, result) => err ? reject(err) : resolve(result)
+        );
+        stream.end(file.buffer);
+      });
+      urls.push(result.secure_url);
+    } catch (e) {
+      console.error("Cloudinary upload error:", e.message);
+    }
+  }
+  res.json({ urls });
 });
 
 // =========================================================================

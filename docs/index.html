@@ -59,6 +59,16 @@
     .post img.post-image {
       width: 100%; border-radius: 8px; margin-top: 0.75rem;
     }
+    .post video.post-video {
+      width: 100%; border-radius: 8px; margin-top: 0.75rem;
+    }
+    .collage { display: grid; gap: 4px; margin-top: 0.75rem; border-radius: 8px; overflow: hidden; }
+    .collage.c2 { grid-template-columns: 1fr 1fr; }
+    .collage.c3 { grid-template-columns: 1fr 1fr; }
+    .collage.c3 img:first-child { grid-row: span 2; }
+    .collage.c4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+    .collage img { width: 100%; height: 100%; object-fit: cover; cursor: pointer; }
+    .collage img:hover { opacity: 0.9; }
     .video-wrap {
       position: relative; padding-bottom: 56.25%; height: 0; margin-top: 0.75rem;
     }
@@ -66,6 +76,30 @@
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       border-radius: 8px; border: 0;
     }
+
+    /* Drop zone (admin only) */
+    .drop-zone {
+      display: none; border: 2px dashed #333; border-radius: 12px; padding: 2rem;
+      text-align: center; color: #555; margin-bottom: 1.25rem; cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .drop-zone.visible { display: block; }
+    .drop-zone.dragover { border-color: #666; background: #1a1a1a; color: #999; }
+    .drop-zone input[type="file"] { display: none; }
+    .drop-preview { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 0.75rem; justify-content: center; }
+    .drop-preview img, .drop-preview video { height: 60px; border-radius: 4px; object-fit: cover; }
+    .drop-form { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    .drop-form input, .drop-form textarea {
+      width: 100%; padding: 0.55rem; border-radius: 6px; border: 1px solid #2a2a2a;
+      background: #1a1a1a; color: #ddd; font-size: 0.85rem; font-family: inherit;
+    }
+    .drop-form textarea { resize: vertical; min-height: 40px; }
+    .drop-form button {
+      align-self: flex-end; padding: 0.5rem 1.2rem; border-radius: 6px;
+      border: none; background: #fff; color: #000; font-size: 0.85rem;
+      font-weight: 600; cursor: pointer;
+    }
+    .drop-form button:disabled { opacity: 0.4; cursor: not-allowed; }
 
     /* --- COMMENTS --- */
     .comments-section { margin-top: 1rem; border-top: 1px solid #1a1a1a; padding-top: 1rem; }
@@ -131,6 +165,17 @@
   </nav>
 
   <div class="container">
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <p>Drop photos or videos here to post</p>
+      <p style="font-size:0.75rem; margin-top:0.3rem;">or click to browse</p>
+      <input type="file" id="file-input" multiple accept="image/*,video/*">
+      <div class="drop-preview" id="drop-preview"></div>
+      <div class="drop-form" id="drop-form" style="display:none;">
+        <input type="text" id="drop-title" placeholder="Title (optional)">
+        <textarea id="drop-body" placeholder="Caption (optional)"></textarea>
+        <button id="drop-submit" onclick="submitDropPost()">Post</button>
+      </div>
+    </div>
     <div id="feed"></div>
   </div>
 
@@ -169,6 +214,21 @@
 
     function renderMedia(post) {
       if (!post.mediaUrl) return "";
+
+      // Check if it's a JSON array of URLs (collage)
+      let urls;
+      try { urls = JSON.parse(post.mediaUrl); } catch(e) { urls = null; }
+
+      if (Array.isArray(urls) && urls.length > 1) {
+        const count = Math.min(urls.length, 4);
+        const cls = count <= 4 ? `c${count}` : "c4";
+        const imgs = urls.slice(0, 4).map(u => {
+          if (u.match(/\.(mp4|mov|webm)/i)) return `<video src="${escHtml(u)}" class="post-video" controls></video>`;
+          return `<img src="${escHtml(u)}" alt="">`;
+        }).join("");
+        return `<div class="collage ${cls}">${imgs}</div>`;
+      }
+
       if (post.type === "music") {
         if (post.mediaUrl.includes("spotify.com")) {
           const embed = post.mediaUrl.replace("open.spotify.com/", "open.spotify.com/embed/").split("?")[0];
@@ -183,6 +243,9 @@
       }
       if (post.type === "video") {
         let src = post.mediaUrl;
+        if (src.match(/\.(mp4|mov|webm)/i)) {
+          return `<video src="${escHtml(src)}" class="post-video" controls></video>`;
+        }
         const yt = src.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?]+)/);
         if (yt) src = "https://www.youtube.com/embed/" + yt[1];
         return `<div class="video-wrap"><iframe src="${escHtml(src)}" allowfullscreen></iframe></div>`;
@@ -330,6 +393,76 @@
       } catch(e) {
         errEl.textContent = "Failed to post comment";
       }
+    }
+
+    // --- Drag and Drop posting (admin only) ---
+    let pendingFiles = [];
+    const dropZone = document.getElementById("drop-zone");
+    const dropPreview = document.getElementById("drop-preview");
+    const dropForm = document.getElementById("drop-form");
+    const fileInput = document.getElementById("file-input");
+
+    // Show drop zone only when admin is logged in
+    function updateDropZone() {
+      if (adminPw) dropZone.classList.add("visible");
+      else dropZone.classList.remove("visible");
+    }
+    updateDropZone();
+
+    // Override adminLogin to also show drop zone
+    const _origAdminLogin = adminLogin;
+    adminLogin = function() { _origAdminLogin(); updateDropZone(); };
+
+    dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("dragover"); });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault(); dropZone.classList.remove("dragover");
+      handleFiles(e.dataTransfer.files);
+    });
+    fileInput.addEventListener("change", e => handleFiles(e.target.files));
+
+    function handleFiles(fileList) {
+      for (const f of fileList) {
+        if (f.type.startsWith("image/") || f.type.startsWith("video/")) pendingFiles.push(f);
+      }
+      renderPreviews();
+    }
+
+    function renderPreviews() {
+      if (!pendingFiles.length) { dropPreview.innerHTML = ""; dropForm.style.display = "none"; return; }
+      dropForm.style.display = "flex";
+      dropPreview.innerHTML = pendingFiles.map((f, i) => {
+        const url = URL.createObjectURL(f);
+        if (f.type.startsWith("video/")) return `<video src="${url}" style="height:60px;border-radius:4px;"></video>`;
+        return `<img src="${url}" alt="">`;
+      }).join("");
+    }
+
+    async function submitDropPost() {
+      if (!pendingFiles.length || !adminPw) return;
+      const btn = document.getElementById("drop-submit");
+      btn.disabled = true; btn.textContent = "Uploading...";
+
+      const form = new FormData();
+      form.append("title", document.getElementById("drop-title").value);
+      form.append("body", document.getElementById("drop-body").value);
+      for (const f of pendingFiles) form.append("media", f);
+
+      try {
+        const res = await fetch(API_BASE + "/api/posts", {
+          method: "POST",
+          headers: { "Authorization": adminPw },
+          body: form,
+        });
+        if (!res.ok) { const e = await res.json(); alert(e.error || "Upload failed"); return; }
+        pendingFiles = [];
+        dropPreview.innerHTML = "";
+        dropForm.style.display = "none";
+        document.getElementById("drop-title").value = "";
+        document.getElementById("drop-body").value = "";
+        location.reload();
+      } catch(e) { alert("Upload failed: " + e.message); }
+      finally { btn.disabled = false; btn.textContent = "Post"; }
     }
 
     // Load and render posts from Railway API
