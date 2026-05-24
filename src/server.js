@@ -219,7 +219,6 @@ app.get("/join", (req, res) => {
 </head><body>
   <div class="container">
     <div class="header">
-      <h1>${escHtml(artistName)}</h1>
       <p>Add this for Notifications for new songs, and shows.</p>
     </div>
     <div class="form-card">
