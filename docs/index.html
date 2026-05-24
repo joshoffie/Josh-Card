@@ -25,10 +25,7 @@
       padding: 0.8rem 1.5rem;
       display: flex; align-items: center; justify-content: space-between;
     }
-    nav .name {
-      font-size: 1.1rem; font-weight: 700; color: #fff;
-      text-decoration: none; letter-spacing: -0.01em;
-    }
+    nav { justify-content: flex-end; }
     .wallet-btn {
       display: inline-flex; align-items: center; gap: 0.4rem;
       background: #fff; color: #000; font-weight: 600; font-size: 0.85rem;
@@ -38,13 +35,6 @@
     .wallet-btn:hover { opacity: 0.85; }
     .wallet-btn svg { width: 18px; height: 18px; }
 
-    /* --- HERO --- */
-    .hero {
-      text-align: center; padding: 4rem 1.5rem 3rem;
-      border-bottom: 1px solid #151515;
-    }
-    .hero h1 { font-size: 2.2rem; color: #fff; margin-bottom: 0.4rem; letter-spacing: -0.02em; }
-    .hero p { font-size: 1rem; color: #666; max-width: 400px; margin: 0 auto; }
 
     /* --- CONTAINER --- */
     .container { max-width: 600px; margin: 0 auto; padding: 2rem 1.5rem; }
@@ -105,40 +95,24 @@
     }
     .comment-form button:hover { background: #444; }
 
-    /* --- FOOTER --- */
-    .footer {
-      text-align: center; font-size: 0.7rem; color: #333;
-      padding: 2rem 1rem; border-top: 1px solid #111;
-    }
 
     .empty { text-align: center; color: #444; padding: 3rem; font-size: 0.95rem; }
 
-    @media (max-width: 480px) {
-      .hero h1 { font-size: 1.7rem; }
-      .hero { padding: 3rem 1rem 2rem; }
-    }
   </style>
 </head>
 <body>
 
   <nav>
-    <a href="/" class="name">Josh Hoffman</a>
     <a href="https://josh-card-production.up.railway.app/join" class="wallet-btn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-      Get the Card
+      Add the Josh Card
     </a>
   </nav>
-
-  <div class="hero">
-    <h1>Josh Hoffman</h1>
-    <p>Music, shows, and things worth sharing.</p>
-  </div>
 
   <div class="container">
     <div id="feed"></div>
   </div>
 
-  <div class="footer">josh.music</div>
 
   <script>
     const API_BASE = "https://josh-card-production.up.railway.app";
