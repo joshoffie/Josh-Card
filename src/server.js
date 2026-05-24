@@ -8,6 +8,7 @@ import {
   getSerialsForDevice, getTokensForSerial,
   getCurrentContent, setContent,
   createPost, getPosts, removePost,
+  addComment, getComments, removeComment,
 } from "./store.js";
 import buildPkpass from "./buildPkpass.js";
 import { pushToAll } from "./apns.js";
@@ -15,6 +16,31 @@ import { pushToAll } from "./apns.js";
 const app = express();
 app.use(express.json());
 app.use("/public", express.static(resolve("public")));
+
+// CORS for GitHub Pages blog
+app.use("/api/comments", (req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
+// =========================================================================
+// Comments API (for the public blog)
+// =========================================================================
+app.get("/api/comments/:slug", (req, res) => {
+  const comments = getComments(req.params.slug);
+  res.json(comments);
+});
+
+app.post("/api/comments/:slug", (req, res) => {
+  const { name, body } = req.body;
+  if (!name?.trim() || !body?.trim()) return res.status(400).json({ error: "name and body required" });
+  if (body.length > 2000) return res.status(400).json({ error: "comment too long" });
+  const comment = addComment(req.params.slug, name.trim(), body.trim());
+  res.status(201).json(comment);
+});
 
 // =========================================================================
 // Health check (Railway / uptime monitors)

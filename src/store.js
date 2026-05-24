@@ -95,6 +95,14 @@ db.exec(`
     media_url    TEXT DEFAULT '',
     created_at   TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS comments (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_slug    TEXT NOT NULL,
+    author_name  TEXT NOT NULL,
+    body         TEXT NOT NULL,
+    created_at   TEXT DEFAULT (datetime('now'))
+  );
 `);
 
 // ---------------------------------------------------------------------------
@@ -221,4 +229,28 @@ export function getPosts(limit = 50) {
 
 export function removePost(id) {
   return deletePost.run(id);
+}
+
+// ---------------------------------------------------------------------------
+// Comments (public blog)
+// ---------------------------------------------------------------------------
+const insertComment = db.prepare(
+  "INSERT INTO comments (post_slug, author_name, body) VALUES (?, ?, ?)"
+);
+const commentsBySlug = db.prepare(
+  "SELECT * FROM comments WHERE post_slug = ? ORDER BY created_at ASC LIMIT 200"
+);
+const deleteComment = db.prepare("DELETE FROM comments WHERE id = ?");
+
+export function addComment(postSlug, authorName, body) {
+  const info = insertComment.run(postSlug, authorName, body);
+  return { id: info.lastInsertRowid, post_slug: postSlug, author_name: authorName, body, created_at: new Date().toISOString() };
+}
+
+export function getComments(postSlug) {
+  return commentsBySlug.all(postSlug);
+}
+
+export function removeComment(id) {
+  return deleteComment.run(id);
 }
