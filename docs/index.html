@@ -82,6 +82,14 @@
     .comment-author { font-size: 0.8rem; font-weight: 600; color: #ccc; }
     .comment-date { font-size: 0.7rem; color: #444; margin-left: 0.5rem; }
     .comment-body { font-size: 0.85rem; color: #999; margin-top: 0.2rem; line-height: 1.4; }
+    .comment-actions { display: flex; gap: 0.75rem; margin-top: 0.3rem; }
+    .comment-actions button {
+      background: none; border: none; color: #555; font-size: 0.75rem;
+      cursor: pointer; font-family: inherit; padding: 0;
+    }
+    .comment-actions button:hover { color: #aaa; }
+    .comment-actions .liked { color: #e74c3c; }
+    .replies { margin-left: 1.2rem; border-left: 1px solid #1e1e1e; padding-left: 0.8rem; }
     .comment-form { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
     .comment-form input, .comment-form textarea {
       width: 100%; padding: 0.55rem; border-radius: 6px; border: 1px solid #2a2a2a;
@@ -94,6 +102,14 @@
       font-weight: 500; cursor: pointer; transition: background 0.2s;
     }
     .comment-form button:hover { background: #444; }
+    .comment-error { color: #e74c3c; font-size: 0.8rem; margin-top: 0.3rem; }
+    .admin-bar { padding: 0.5rem 1rem; background: #1a1a1a; border-bottom: 1px solid #222;
+      display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: #666; }
+    .admin-bar input { padding: 0.3rem 0.5rem; border-radius: 4px; border: 1px solid #333;
+      background: #111; color: #ddd; font-size: 0.8rem; width: 150px; }
+    .admin-bar button { padding: 0.3rem 0.6rem; border-radius: 4px; border: none;
+      background: #333; color: #ddd; font-size: 0.75rem; cursor: pointer; }
+    .admin-bar .status { color: #4a4; }
 
 
     .empty { text-align: center; color: #444; padding: 3rem; font-size: 0.95rem; }
@@ -101,6 +117,13 @@
   </style>
 </head>
 <body>
+
+  <div class="admin-bar" id="admin-bar">
+    <span>Admin:</span>
+    <input type="password" id="admin-pw" placeholder="Password">
+    <button onclick="adminLogin()">Login</button>
+    <span class="status" id="admin-status"></span>
+  </div>
 
   <nav>
     <a href="https://josh-card-production.up.railway.app/join" class="wallet-btn">
@@ -113,9 +136,19 @@
     <div id="feed"></div>
   </div>
 
-
   <script>
     const API_BASE = "https://josh-card-production.up.railway.app";
+    let adminPw = localStorage.getItem("adminPw") || "";
+    let likedComments = JSON.parse(localStorage.getItem("liked") || "[]");
+
+    if (adminPw) document.getElementById("admin-status").textContent = "Logged in";
+
+    function adminLogin() {
+      adminPw = document.getElementById("admin-pw").value;
+      localStorage.setItem("adminPw", adminPw);
+      document.getElementById("admin-status").textContent = "Logged in";
+      document.getElementById("admin-pw").value = "";
+    }
 
     function escHtml(s) {
       const d = document.createElement("div");
@@ -124,6 +157,7 @@
     }
 
     function formatDate(d) {
+      if (!d) return "";
       const dt = new Date(d + "T00:00:00");
       return dt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
     }
@@ -156,10 +190,11 @@
         <button class="comments-toggle" onclick="toggleComments('${slug}', this)">Show comments</button>
         <div id="comments-${slug}" style="display:none;">
           <div class="comments-list" id="clist-${slug}"></div>
-          <div class="comment-form">
+          <div class="comment-form" id="cform-${slug}">
             <input type="text" id="cname-${slug}" placeholder="Your name" maxlength="50">
             <textarea id="cbody-${slug}" placeholder="Leave a comment..." maxlength="2000"></textarea>
             <button onclick="postComment('${slug}')">Post</button>
+            <div class="comment-error" id="cerr-${slug}"></div>
           </div>
         </div>
       </div>`;
@@ -177,6 +212,38 @@
       }
     }
 
+    function renderCommentTree(comments, slug) {
+      const topLevel = comments.filter(c => !c.parent_id);
+      const replies = comments.filter(c => c.parent_id);
+
+      function getReplies(parentId) {
+        return replies.filter(c => c.parent_id === parentId);
+      }
+
+      function renderOne(c, depth) {
+        const isLiked = likedComments.includes(c.id);
+        const deleteBtn = adminPw ? `<button onclick="deleteComment(${c.id}, '${slug}')">Delete</button>` : "";
+        const replyBtn = depth < 2 ? `<button onclick="showReplyForm(${c.id}, '${slug}')">Reply</button>` : "";
+        const childReplies = getReplies(c.id);
+        return `<div class="comment" id="comment-${c.id}">
+          <span class="comment-author">${escHtml(c.author_name)}</span>
+          <span class="comment-date">${c.created_at?.slice(0, 10) || ""}</span>
+          <div class="comment-body">${escHtml(c.body)}</div>
+          <div class="comment-actions">
+            <button class="${isLiked ? 'liked' : ''}" onclick="likeComment(${c.id}, '${slug}')">
+              ${isLiked ? '&#9829;' : '&#9825;'} ${c.likes || 0}
+            </button>
+            ${replyBtn}
+            ${deleteBtn}
+          </div>
+          <div id="reply-form-${c.id}"></div>
+          ${childReplies.length ? `<div class="replies">${childReplies.map(r => renderOne(r, depth + 1)).join("")}</div>` : ""}
+        </div>`;
+      }
+
+      return topLevel.map(c => renderOne(c, 0)).join("");
+    }
+
     async function loadComments(slug) {
       const list = document.getElementById("clist-" + slug);
       try {
@@ -186,29 +253,78 @@
           list.innerHTML = '<p style="font-size:0.8rem; color:#444; padding:0.5rem 0;">No comments yet.</p>';
           return;
         }
-        list.innerHTML = comments.map(c => `<div class="comment">
-          <span class="comment-author">${escHtml(c.author_name)}</span>
-          <span class="comment-date">${c.created_at?.slice(0, 10) || ""}</span>
-          <div class="comment-body">${escHtml(c.body)}</div>
-        </div>`).join("");
+        list.innerHTML = renderCommentTree(comments, slug);
       } catch(e) {
         list.innerHTML = '<p style="color:#555; font-size:0.8rem;">Could not load comments.</p>';
       }
     }
 
-    async function postComment(slug) {
-      const name = document.getElementById("cname-" + slug).value.trim();
-      const body = document.getElementById("cbody-" + slug).value.trim();
-      if (!name || !body) return;
+    function showReplyForm(parentId, slug) {
+      const container = document.getElementById("reply-form-" + parentId);
+      if (container.innerHTML) { container.innerHTML = ""; return; }
+      container.innerHTML = `<div class="comment-form" style="margin-top:0.5rem;">
+        <input type="text" id="rname-${parentId}" placeholder="Your name" maxlength="50">
+        <textarea id="rbody-${parentId}" placeholder="Reply..." maxlength="2000"></textarea>
+        <button onclick="postComment('${slug}', ${parentId})">Reply</button>
+        <div class="comment-error" id="rerr-${parentId}"></div>
+      </div>`;
+    }
+
+    async function likeComment(id, slug) {
+      if (likedComments.includes(id)) return;
       try {
-        await fetch(API_BASE + "/api/comments/" + slug, {
+        await fetch(API_BASE + "/api/comments/" + id + "/like", { method: "POST" });
+        likedComments.push(id);
+        localStorage.setItem("liked", JSON.stringify(likedComments));
+        await loadComments(slug);
+      } catch(e) {}
+    }
+
+    async function deleteComment(id, slug) {
+      if (!adminPw) return;
+      if (!confirm("Delete this comment?")) return;
+      try {
+        await fetch(API_BASE + "/api/comments/" + id, {
+          method: "DELETE",
+          headers: { "Authorization": adminPw }
+        });
+        await loadComments(slug);
+      } catch(e) {}
+    }
+
+    async function postComment(slug, parentId) {
+      let name, body, errEl;
+      if (parentId) {
+        name = document.getElementById("rname-" + parentId).value.trim();
+        body = document.getElementById("rbody-" + parentId).value.trim();
+        errEl = document.getElementById("rerr-" + parentId);
+      } else {
+        name = document.getElementById("cname-" + slug).value.trim();
+        body = document.getElementById("cbody-" + slug).value.trim();
+        errEl = document.getElementById("cerr-" + slug);
+      }
+      if (!name || !body) return;
+      errEl.textContent = "";
+      try {
+        const res = await fetch(API_BASE + "/api/comments/" + slug, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, body }),
+          body: JSON.stringify({ name, body, parentId: parentId || undefined }),
         });
-        document.getElementById("cbody-" + slug).value = "";
+        if (!res.ok) {
+          const err = await res.json();
+          errEl.textContent = err.error || "Error posting comment";
+          return;
+        }
+        if (parentId) {
+          document.getElementById("reply-form-" + parentId).innerHTML = "";
+        } else {
+          document.getElementById("cbody-" + slug).value = "";
+        }
         await loadComments(slug);
-      } catch(e) { /* silent */ }
+      } catch(e) {
+        errEl.textContent = "Failed to post comment";
+      }
     }
 
     // Load and render posts from Railway API

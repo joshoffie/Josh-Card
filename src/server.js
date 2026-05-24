@@ -8,7 +8,7 @@ import {
   getSerialsForDevice, getTokensForSerial,
   getCurrentContent, setContent,
   createPost, getPosts, removePost,
-  addComment, getComments, removeComment,
+  addComment, getComments, removeComment, incrementLike, containsSlurs,
 } from "./store.js";
 import buildPkpass from "./buildPkpass.js";
 import { pushToAll } from "./apns.js";
@@ -20,8 +20,8 @@ app.use("/public", express.static(resolve("public")));
 // CORS for GitHub Pages blog
 app.use("/api/comments", (req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
 });
@@ -50,7 +50,7 @@ app.get("/api/posts", (req, res) => {
 });
 
 // =========================================================================
-// Comments API (for the public blog)
+// Comments API (for the public blog) — replies, likes, moderation
 // =========================================================================
 app.get("/api/comments/:slug", (req, res) => {
   const comments = getComments(req.params.slug);
@@ -58,11 +58,32 @@ app.get("/api/comments/:slug", (req, res) => {
 });
 
 app.post("/api/comments/:slug", (req, res) => {
-  const { name, body } = req.body;
+  const { name, body, parentId } = req.body;
   if (!name?.trim() || !body?.trim()) return res.status(400).json({ error: "name and body required" });
   if (body.length > 2000) return res.status(400).json({ error: "comment too long" });
-  const comment = addComment(req.params.slug, name.trim(), body.trim());
+  if (containsSlurs(name) || containsSlurs(body)) {
+    return res.status(400).json({ error: "Your comment contains language that isn't allowed. Slurs are blocked." });
+  }
+  const comment = addComment(req.params.slug, name.trim(), body.trim(), parentId || null);
   res.status(201).json(comment);
+});
+
+app.post("/api/comments/:id/like", (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "invalid id" });
+  const updated = incrementLike(id);
+  if (!updated) return res.status(404).json({ error: "comment not found" });
+  res.json({ likes: updated.likes });
+});
+
+// Admin delete comment (requires ADMIN_PASSWORD in Authorization header)
+app.delete("/api/comments/:id", (req, res) => {
+  const pw = req.headers.authorization;
+  if (pw !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: "unauthorized" });
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "invalid id" });
+  removeComment(id);
+  res.json({ deleted: true });
 });
 
 // =========================================================================

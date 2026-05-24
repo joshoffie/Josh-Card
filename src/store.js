@@ -99,11 +99,18 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS comments (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     post_slug    TEXT NOT NULL,
+    parent_id    INTEGER DEFAULT NULL,
     author_name  TEXT NOT NULL,
     body         TEXT NOT NULL,
-    created_at   TEXT DEFAULT (datetime('now'))
+    likes        INTEGER DEFAULT 0,
+    created_at   TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (parent_id) REFERENCES comments(id) ON DELETE CASCADE
   );
 `);
+
+// Migrations — add columns if upgrading from older schema
+try { db.exec("ALTER TABLE comments ADD COLUMN parent_id INTEGER DEFAULT NULL"); } catch(e) {}
+try { db.exec("ALTER TABLE comments ADD COLUMN likes INTEGER DEFAULT 0"); } catch(e) {}
 
 // ---------------------------------------------------------------------------
 // Auth token — deterministic HMAC of the serial, no storage needed
@@ -232,25 +239,54 @@ export function removePost(id) {
 }
 
 // ---------------------------------------------------------------------------
-// Comments (public blog)
+// Comments (public blog) — supports replies and likes
 // ---------------------------------------------------------------------------
 const insertComment = db.prepare(
-  "INSERT INTO comments (post_slug, author_name, body) VALUES (?, ?, ?)"
+  "INSERT INTO comments (post_slug, parent_id, author_name, body) VALUES (?, ?, ?, ?)"
 );
 const commentsBySlug = db.prepare(
-  "SELECT * FROM comments WHERE post_slug = ? ORDER BY created_at ASC LIMIT 200"
+  "SELECT * FROM comments WHERE post_slug = ? ORDER BY created_at ASC LIMIT 500"
 );
 const deleteComment = db.prepare("DELETE FROM comments WHERE id = ?");
+const likeComment = db.prepare("UPDATE comments SET likes = likes + 1 WHERE id = ?");
+const getCommentById = db.prepare("SELECT * FROM comments WHERE id = ?");
 
-export function addComment(postSlug, authorName, body) {
-  const info = insertComment.run(postSlug, authorName, body);
-  return { id: info.lastInsertRowid, post_slug: postSlug, author_name: authorName, body, created_at: new Date().toISOString() };
+export function addComment(postSlug, authorName, body, parentId = null) {
+  const info = insertComment.run(postSlug, parentId, authorName, body);
+  return { id: info.lastInsertRowid, post_slug: postSlug, parent_id: parentId, author_name: authorName, body, likes: 0, created_at: new Date().toISOString() };
 }
 
 export function getComments(postSlug) {
   return commentsBySlug.all(postSlug);
 }
 
+export function incrementLike(commentId) {
+  likeComment.run(commentId);
+  return getCommentById.get(commentId);
+}
+
 export function removeComment(id) {
   return deleteComment.run(id);
+}
+
+// ---------------------------------------------------------------------------
+// Content moderation — block slurs, allow foul language
+// ---------------------------------------------------------------------------
+const SLUR_PATTERNS = [
+  /\bn[i1!]gg[ae3]r?s?\b/i,
+  /\bf[a@]gg?[o0]t?s?\b/i,
+  /\bk[i1!]ke?s?\b/i,
+  /\bsp[i1!]c?k?s?\b/i,
+  /\bch[i1!]nk?s?\b/i,
+  /\bw[e3]tb[a@]ck?s?\b/i,
+  /\btr[a@]nn(?:y|ie)s?\b/i,
+  /\br[e3]t[a@]rd?s?\b/i,
+  /\bcoon?s?\b/i,
+  /\bgook?s?\b/i,
+  /\bdyke?s?\b/i,
+  /\bhomo?s?\b/i,
+];
+
+export function containsSlurs(text) {
+  return SLUR_PATTERNS.some(p => p.test(text));
 }
