@@ -84,7 +84,7 @@ export default async function buildPkpass({ name, email, serial, source }) {
     value: new Date().getFullYear().toString(),
   });
 
-  pkpass.primaryFields.push({
+  pkpass.secondaryFields.push({
     key: "fanName",
     label: "",
     value: name,
