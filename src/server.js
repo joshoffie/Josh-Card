@@ -220,7 +220,7 @@ app.get("/join", (req, res) => {
   <div class="container">
     <div class="header">
       <h1>${escHtml(artistName)}</h1>
-      <p>Get your fan card</p>
+      <p>Add this for Notifications for new songs, and shows.</p>
     </div>
     <div class="form-card">
       <form id="joinForm">
@@ -229,7 +229,7 @@ app.get("/join", (req, res) => {
         <button type="submit" class="btn">Add to Apple Wallet</button>
       </form>
     </div>
-    <p class="note">Free. No app needed. Card goes straight to your iPhone wallet<br>with exclusive access and lock-screen updates.</p>
+    <p class="note">Card goes straight to your iPhone wallet with fun updates and stuff.</p>
   </div>
   <script>
     document.getElementById("joinForm").addEventListener("submit", function(e) {
