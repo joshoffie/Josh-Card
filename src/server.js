@@ -802,24 +802,117 @@ function renderAdminPage({ fans, devices, content, recentFans, posts, allComment
     </div>
 
     <div class="card">
-      <h2>New Post (fans-only feed)</h2>
-      <form method="POST" action="/admin/post">
-        <label>Post Type</label>
-        <select name="postType">
-          <option value="text">Text / Update</option>
-          <option value="music">Music Embed (Spotify / SoundCloud)</option>
-          <option value="image">Image</option>
-          <option value="video">Video (YouTube)</option>
-        </select>
-        <label>Title</label>
-        <input name="title" placeholder="Optional title">
-        <label>Body</label>
-        <textarea name="body" placeholder="Write something for your fans..."></textarea>
-        <label>Media URL <span style="color:#555; text-transform:none; letter-spacing:0;">(Spotify link, image URL, YouTube link)</span></label>
-        <input name="mediaUrl" placeholder="https://...">
-        <button type="submit" class="btn">Publish Post</button>
-      </form>
+      <h2>New Post</h2>
+      <div id="drop-zone" style="border:2px dashed #333; border-radius:10px; padding:2rem; text-align:center;
+        color:#555; cursor:pointer; margin-bottom:1rem; transition:border-color 0.2s, background 0.2s;"
+        onclick="document.getElementById('file-input').click()">
+        <p style="font-size:0.95rem;">Drop photos or videos here</p>
+        <p style="font-size:0.75rem; margin-top:0.3rem; color:#444;">or click to browse</p>
+        <input type="file" id="file-input" multiple accept="image/*,video/*" style="display:none;">
+      </div>
+      <div id="drop-preview" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:1rem;"></div>
+      <div id="upload-status" style="color:#6fcf8a; font-size:0.85rem; margin-bottom:0.5rem;"></div>
+
+      <label>Title</label>
+      <input id="post-title" placeholder="Optional title">
+      <label>Body</label>
+      <textarea id="post-body" placeholder="Write something..."></textarea>
+      <label>Or paste a media URL <span style="color:#555; text-transform:none; letter-spacing:0;">(Spotify, YouTube, image link)</span></label>
+      <input id="post-url" placeholder="https://...">
+      <select id="post-type" style="margin-bottom:1rem;">
+        <option value="">Auto-detect type</option>
+        <option value="text">Text / Update</option>
+        <option value="music">Music Embed</option>
+        <option value="image">Image</option>
+        <option value="video">Video</option>
+      </select>
+      <button class="btn" id="post-btn" onclick="submitPost()">Publish Post</button>
     </div>
+
+    <script>
+      let pendingFiles = [];
+      const dropZone = document.getElementById("drop-zone");
+      const fileInput = document.getElementById("file-input");
+      const preview = document.getElementById("drop-preview");
+
+      dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.style.borderColor = "#666"; dropZone.style.background = "#1a1a1a"; });
+      dropZone.addEventListener("dragleave", () => { dropZone.style.borderColor = "#333"; dropZone.style.background = ""; });
+      dropZone.addEventListener("drop", e => {
+        e.preventDefault(); dropZone.style.borderColor = "#333"; dropZone.style.background = "";
+        addFiles(e.dataTransfer.files);
+      });
+      fileInput.addEventListener("change", e => addFiles(e.target.files));
+
+      function addFiles(fileList) {
+        for (const f of fileList) {
+          if (f.type.startsWith("image/") || f.type.startsWith("video/")) pendingFiles.push(f);
+        }
+        renderPreview();
+      }
+
+      function renderPreview() {
+        preview.innerHTML = pendingFiles.map((f, i) => {
+          const url = URL.createObjectURL(f);
+          const remove = '<span onclick="removeFile(' + i + ')" style="position:absolute;top:2px;right:4px;color:#f66;cursor:pointer;font-size:14px;">&times;</span>';
+          if (f.type.startsWith("video/"))
+            return '<div style="position:relative;display:inline-block;"><video src="' + url + '" style="height:60px;border-radius:4px;"></video>' + remove + '</div>';
+          return '<div style="position:relative;display:inline-block;"><img src="' + url + '" style="height:60px;border-radius:4px;object-fit:cover;">' + remove + '</div>';
+        }).join("");
+      }
+
+      function removeFile(i) { pendingFiles.splice(i, 1); renderPreview(); }
+
+      async function submitPost() {
+        const btn = document.getElementById("post-btn");
+        const status = document.getElementById("upload-status");
+        const title = document.getElementById("post-title").value;
+        const body = document.getElementById("post-body").value;
+        const url = document.getElementById("post-url").value;
+        const type = document.getElementById("post-type").value;
+
+        if (!pendingFiles.length && !body && !url && !title) { alert("Add some content first"); return; }
+
+        btn.disabled = true; btn.textContent = "Publishing...";
+        status.textContent = "";
+
+        if (pendingFiles.length) {
+          // Upload via API with files
+          const form = new FormData();
+          form.append("title", title);
+          form.append("body", body);
+          if (type) form.append("type", type);
+          for (const f of pendingFiles) form.append("media", f);
+
+          try {
+            status.textContent = "Uploading " + pendingFiles.length + " file(s)...";
+            const res = await fetch("/api/posts", {
+              method: "POST",
+              headers: { "Authorization": "${escHtml(process.env.ADMIN_PASSWORD || "")}" },
+              body: form,
+            });
+            if (!res.ok) { const e = await res.json(); alert(e.error || "Upload failed"); return; }
+            status.textContent = "Published!";
+            pendingFiles = []; preview.innerHTML = "";
+            document.getElementById("post-title").value = "";
+            document.getElementById("post-body").value = "";
+            setTimeout(() => location.reload(), 500);
+          } catch(e) { alert("Error: " + e.message); }
+          finally { btn.disabled = false; btn.textContent = "Publish Post"; }
+        } else {
+          // Text/URL post — use the regular form submit
+          const form = document.createElement("form");
+          form.method = "POST"; form.action = "/admin/post";
+          const fields = { postType: type || "text", title, body, mediaUrl: url };
+          for (const [k, v] of Object.entries(fields)) {
+            const inp = document.createElement("input");
+            inp.type = "hidden"; inp.name = k; inp.value = v;
+            form.appendChild(inp);
+          }
+          document.body.appendChild(form);
+          form.submit();
+        }
+      }
+    </script>
 
     ${posts.length ? `
     <div class="card">

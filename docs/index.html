@@ -77,29 +77,6 @@
       border-radius: 8px; border: 0;
     }
 
-    /* Drop zone (admin only) */
-    .drop-zone {
-      display: none; border: 2px dashed #333; border-radius: 12px; padding: 2rem;
-      text-align: center; color: #555; margin-bottom: 1.25rem; cursor: pointer;
-      transition: border-color 0.2s, background 0.2s;
-    }
-    .drop-zone.visible { display: block; }
-    .drop-zone.dragover { border-color: #666; background: #1a1a1a; color: #999; }
-    .drop-zone input[type="file"] { display: none; }
-    .drop-preview { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 0.75rem; justify-content: center; }
-    .drop-preview img, .drop-preview video { height: 60px; border-radius: 4px; object-fit: cover; }
-    .drop-form { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
-    .drop-form input, .drop-form textarea {
-      width: 100%; padding: 0.55rem; border-radius: 6px; border: 1px solid #2a2a2a;
-      background: #1a1a1a; color: #ddd; font-size: 0.85rem; font-family: inherit;
-    }
-    .drop-form textarea { resize: vertical; min-height: 40px; }
-    .drop-form button {
-      align-self: flex-end; padding: 0.5rem 1.2rem; border-radius: 6px;
-      border: none; background: #fff; color: #000; font-size: 0.85rem;
-      font-weight: 600; cursor: pointer;
-    }
-    .drop-form button:disabled { opacity: 0.4; cursor: not-allowed; }
 
     /* --- COMMENTS --- */
     .comments-section { margin-top: 1rem; border-top: 1px solid #1a1a1a; padding-top: 1rem; }
@@ -153,30 +130,13 @@
   </nav>
 
   <div class="container">
-    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
-      <p>Drop photos or videos here to post</p>
-      <p style="font-size:0.75rem; margin-top:0.3rem;">or click to browse</p>
-      <input type="file" id="file-input" multiple accept="image/*,video/*">
-      <div class="drop-preview" id="drop-preview"></div>
-      <div class="drop-form" id="drop-form" style="display:none;">
-        <input type="text" id="drop-title" placeholder="Title (optional)">
-        <textarea id="drop-body" placeholder="Caption (optional)"></textarea>
-        <button id="drop-submit" onclick="submitDropPost()">Post</button>
-      </div>
-    </div>
     <div id="feed"></div>
   </div>
 
 
   <script>
     const API_BASE = "https://josh-card-production.up.railway.app";
-    let adminPw = localStorage.getItem("adminPw") || "";
     let likedComments = JSON.parse(localStorage.getItem("liked") || "[]");
-
-    function adminLogin() {
-      adminPw = prompt("Admin password:");
-      if (adminPw) localStorage.setItem("adminPw", adminPw);
-    }
 
     function escHtml(s) {
       const d = document.createElement("div");
@@ -357,75 +317,6 @@
       } catch(e) {
         errEl.textContent = "Failed to post comment";
       }
-    }
-
-    // --- Drag and Drop posting (admin only) ---
-    let pendingFiles = [];
-    const dropZone = document.getElementById("drop-zone");
-    const dropPreview = document.getElementById("drop-preview");
-    const dropForm = document.getElementById("drop-form");
-    const fileInput = document.getElementById("file-input");
-
-    // Show drop zone if admin password is saved
-    if (adminPw) dropZone.classList.add("visible");
-    // Double-click the page background to toggle drop zone (admin convenience)
-    document.addEventListener("dblclick", e => {
-      if (e.target === document.body || e.target.classList.contains("container")) {
-        if (!adminPw) { adminPw = prompt("Admin password:"); if (adminPw) localStorage.setItem("adminPw", adminPw); }
-        if (adminPw) dropZone.classList.toggle("visible");
-      }
-    });
-
-    dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("dragover"); });
-    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
-    dropZone.addEventListener("drop", e => {
-      e.preventDefault(); dropZone.classList.remove("dragover");
-      handleFiles(e.dataTransfer.files);
-    });
-    fileInput.addEventListener("change", e => handleFiles(e.target.files));
-
-    function handleFiles(fileList) {
-      for (const f of fileList) {
-        if (f.type.startsWith("image/") || f.type.startsWith("video/")) pendingFiles.push(f);
-      }
-      renderPreviews();
-    }
-
-    function renderPreviews() {
-      if (!pendingFiles.length) { dropPreview.innerHTML = ""; dropForm.style.display = "none"; return; }
-      dropForm.style.display = "flex";
-      dropPreview.innerHTML = pendingFiles.map((f, i) => {
-        const url = URL.createObjectURL(f);
-        if (f.type.startsWith("video/")) return `<video src="${url}" style="height:60px;border-radius:4px;"></video>`;
-        return `<img src="${url}" alt="">`;
-      }).join("");
-    }
-
-    async function submitDropPost() {
-      if (!pendingFiles.length || !adminPw) return;
-      const btn = document.getElementById("drop-submit");
-      btn.disabled = true; btn.textContent = "Uploading...";
-
-      const form = new FormData();
-      form.append("title", document.getElementById("drop-title").value);
-      form.append("body", document.getElementById("drop-body").value);
-      for (const f of pendingFiles) form.append("media", f);
-
-      try {
-        const res = await fetch(API_BASE + "/api/posts", {
-          method: "POST",
-          headers: { "Authorization": adminPw },
-          body: form,
-        });
-        if (!res.ok) { const e = await res.json(); alert(e.error || "Upload failed"); return; }
-        pendingFiles = [];
-        dropPreview.innerHTML = "";
-        dropForm.style.display = "none";
-        document.getElementById("drop-title").value = "";
-        document.getElementById("drop-body").value = "";
-        location.reload();
-      } catch(e) { alert("Upload failed: " + e.message); }
-      finally { btn.disabled = false; btn.textContent = "Post"; }
     }
 
     // Load and render posts from Railway API
