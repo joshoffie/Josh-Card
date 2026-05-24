@@ -80,11 +80,6 @@
 
     /* --- COMMENTS --- */
     .comments-section { margin-top: 1rem; border-top: 1px solid #1a1a1a; padding-top: 1rem; }
-    .comments-toggle {
-      font-size: 0.8rem; color: #555; cursor: pointer; background: none;
-      border: none; font-family: inherit; padding: 0;
-    }
-    .comments-toggle:hover { color: #888; }
     .comments-list { margin-top: 0.75rem; }
     .comment {
       padding: 0.6rem 0; border-bottom: 1px solid #151515;
@@ -233,8 +228,7 @@
 
     function renderComments(slug) {
       return `<div class="comments-section">
-        <button class="comments-toggle" onclick="toggleComments('${slug}', this)">Show comments</button>
-        <div id="comments-${slug}" style="display:none;">
+        <div id="comments-${slug}">
           <div class="comments-list" id="clist-${slug}"></div>
           <div class="comment-form" id="cform-${slug}">
             <input type="text" id="cname-${slug}" placeholder="Your name" maxlength="50">
@@ -246,17 +240,6 @@
       </div>`;
     }
 
-    async function toggleComments(slug, btn) {
-      const el = document.getElementById("comments-" + slug);
-      if (el.style.display === "none") {
-        el.style.display = "block";
-        btn.textContent = "Hide comments";
-        await loadComments(slug);
-      } else {
-        el.style.display = "none";
-        btn.textContent = "Show comments";
-      }
-    }
 
     function renderCommentTree(comments, slug) {
       const topLevel = comments.filter(c => !c.parent_id);
@@ -375,6 +358,8 @@
           ${renderMedia(p)}
           ${renderComments(p.slug)}
         </div>`).join("");
+        // Auto-load comments for all posts
+        posts.forEach(p => loadComments(p.slug));
       });
 
     // --- Expand post on click ---
