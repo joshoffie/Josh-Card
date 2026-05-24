@@ -25,6 +25,29 @@ app.use("/api/comments", (req, res, next) => {
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
 });
+app.use("/api/posts", (req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
+// =========================================================================
+// Public Posts API (for the blog)
+// =========================================================================
+app.get("/api/posts", (req, res) => {
+  const posts = getPosts(100);
+  const formatted = posts.map(p => ({
+    slug: "post-" + p.id,
+    title: p.title || "",
+    date: (p.created_at || "").slice(0, 10),
+    type: p.post_type || "text",
+    body: p.body || "",
+    mediaUrl: p.media_url || "",
+  }));
+  res.json(formatted);
+});
 
 // =========================================================================
 // Comments API (for the public blog)

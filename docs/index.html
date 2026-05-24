@@ -211,8 +211,8 @@
       } catch(e) { /* silent */ }
     }
 
-    // Load and render posts
-    fetch("posts.json?" + Date.now())
+    // Load and render posts from Railway API
+    fetch(API_BASE + "/api/posts")
       .then(r => r.json())
       .then(posts => {
         const feed = document.getElementById("feed");
