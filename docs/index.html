@@ -137,18 +137,6 @@
     }
     .comment-form button:hover { background: #444; }
     .comment-error { color: #e74c3c; font-size: 0.8rem; margin-top: 0.3rem; }
-    .admin-link { display: block; text-align: center; padding: 2rem 0 1rem;
-      font-size: 0.6rem; color: #222; cursor: pointer; }
-    .admin-link:hover { color: #444; }
-    .admin-modal { display: none; position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%);
-      background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 0.75rem;
-      z-index: 200; gap: 0.4rem; align-items: center; }
-    .admin-modal.show { display: flex; }
-    .admin-modal input { padding: 0.3rem 0.5rem; border-radius: 4px; border: 1px solid #333;
-      background: #111; color: #ddd; font-size: 0.8rem; width: 130px; }
-    .admin-modal button { padding: 0.3rem 0.6rem; border-radius: 4px; border: none;
-      background: #333; color: #ddd; font-size: 0.75rem; cursor: pointer; }
-    .admin-modal .status { color: #4a4; font-size: 0.75rem; }
 
 
     .empty { text-align: center; color: #444; padding: 3rem; font-size: 0.95rem; }
@@ -179,25 +167,15 @@
     <div id="feed"></div>
   </div>
 
-  <div class="admin-link" onclick="document.getElementById('admin-modal').classList.toggle('show')">.</div>
-  <div class="admin-modal" id="admin-modal">
-    <input type="password" id="admin-pw" placeholder="Password">
-    <button onclick="adminLogin()">Go</button>
-    <span class="status" id="admin-status"></span>
-  </div>
 
   <script>
     const API_BASE = "https://josh-card-production.up.railway.app";
     let adminPw = localStorage.getItem("adminPw") || "";
     let likedComments = JSON.parse(localStorage.getItem("liked") || "[]");
 
-    if (adminPw) document.getElementById("admin-status").textContent = "Logged in";
-
     function adminLogin() {
-      adminPw = document.getElementById("admin-pw").value;
-      localStorage.setItem("adminPw", adminPw);
-      document.getElementById("admin-status").textContent = "Logged in";
-      document.getElementById("admin-pw").value = "";
+      adminPw = prompt("Admin password:");
+      if (adminPw) localStorage.setItem("adminPw", adminPw);
     }
 
     function escHtml(s) {
@@ -290,7 +268,6 @@
 
       function renderOne(c, depth) {
         const isLiked = likedComments.includes(c.id);
-        const deleteBtn = adminPw ? `<button onclick="deleteComment(${c.id}, '${slug}')">Delete</button>` : "";
         const replyBtn = depth < 2 ? `<button onclick="showReplyForm(${c.id}, '${slug}')">Reply</button>` : "";
         const childReplies = getReplies(c.id);
         return `<div class="comment" id="comment-${c.id}">
@@ -302,7 +279,6 @@
               ${isLiked ? '&#9829;' : '&#9825;'} ${c.likes || 0}
             </button>
             ${replyBtn}
-            ${deleteBtn}
           </div>
           <div id="reply-form-${c.id}"></div>
           ${childReplies.length ? `<div class="replies">${childReplies.map(r => renderOne(r, depth + 1)).join("")}</div>` : ""}
@@ -344,18 +320,6 @@
         await fetch(API_BASE + "/api/comments/" + id + "/like", { method: "POST" });
         likedComments.push(id);
         localStorage.setItem("liked", JSON.stringify(likedComments));
-        await loadComments(slug);
-      } catch(e) {}
-    }
-
-    async function deleteComment(id, slug) {
-      if (!adminPw) return;
-      if (!confirm("Delete this comment?")) return;
-      try {
-        await fetch(API_BASE + "/api/comments/" + id, {
-          method: "DELETE",
-          headers: { "Authorization": adminPw }
-        });
         await loadComments(slug);
       } catch(e) {}
     }
@@ -402,16 +366,15 @@
     const dropForm = document.getElementById("drop-form");
     const fileInput = document.getElementById("file-input");
 
-    // Show drop zone only when admin is logged in
-    function updateDropZone() {
-      if (adminPw) dropZone.classList.add("visible");
-      else dropZone.classList.remove("visible");
-    }
-    updateDropZone();
-
-    // Override adminLogin to also show drop zone
-    const _origAdminLogin = adminLogin;
-    adminLogin = function() { _origAdminLogin(); updateDropZone(); };
+    // Show drop zone if admin password is saved
+    if (adminPw) dropZone.classList.add("visible");
+    // Double-click the page background to toggle drop zone (admin convenience)
+    document.addEventListener("dblclick", e => {
+      if (e.target === document.body || e.target.classList.contains("container")) {
+        if (!adminPw) { adminPw = prompt("Admin password:"); if (adminPw) localStorage.setItem("adminPw", adminPw); }
+        if (adminPw) dropZone.classList.toggle("visible");
+      }
+    });
 
     dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("dragover"); });
     dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));

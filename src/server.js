@@ -346,7 +346,8 @@ app.get("/admin", (req, res) => {
   const content = getCurrentContent();
   const recentFans = db.prepare("SELECT name, email, source, created_at FROM passes ORDER BY created_at DESC LIMIT 10").all();
   const posts = getPosts(20);
-  res.send(renderAdminPage({ fans, devices, content, recentFans, posts }));
+  const allComments = db.prepare("SELECT * FROM comments ORDER BY created_at DESC LIMIT 100").all();
+  res.send(renderAdminPage({ fans, devices, content, recentFans, posts, allComments }));
 });
 
 app.post("/admin/broadcast", async (req, res) => {
@@ -382,6 +383,13 @@ app.post("/admin/post/delete", (req, res) => {
   const { id } = req.body;
   if (id) removePost(Number(id));
   res.redirect("/admin?deleted=1");
+});
+
+// --- Admin: delete a comment ------------------------------------------------
+app.post("/admin/comment/delete", (req, res) => {
+  const { id } = req.body;
+  if (id) removeComment(Number(id));
+  res.redirect("/admin?comment_deleted=1");
 });
 
 // =========================================================================
@@ -697,7 +705,7 @@ function renderAdminLogin(error = "") {
 </body></html>`;
 }
 
-function renderAdminPage({ fans, devices, content, recentFans, posts }) {
+function renderAdminPage({ fans, devices, content, recentFans, posts, allComments }) {
   const artistName = CFG.artistName;
   return `<!DOCTYPE html>
 <html lang="en"><head>
@@ -774,6 +782,7 @@ function renderAdminPage({ fans, devices, content, recentFans, posts }) {
       if (p.get("sent")) el.innerHTML = '<div class="success">Broadcast sent! Updated ' + p.get("updated") + ' cards, pushed to ' + p.get("pushed") + ' devices.</div>';
       if (p.get("posted")) el.innerHTML = '<div class="success">Post published to your fan feed.</div>';
       if (p.get("deleted")) el.innerHTML = '<div class="success">Post deleted.</div>';
+      if (p.get("comment_deleted")) el.innerHTML = '<div class="success">Comment deleted.</div>';
       if (p.get("error")) el.innerHTML = '<div class="error">Error: ' + p.get("error") + '</div>';
     </script>
 
@@ -823,6 +832,22 @@ function renderAdminPage({ fans, devices, content, recentFans, posts }) {
         <form method="POST" action="/admin/post/delete" style="margin:0;">
           <input type="hidden" name="id" value="${p.id}">
           <button type="submit" class="btn-sm" onclick="return confirm('Delete this post?')">Delete</button>
+        </form>
+      </div>`).join("")}
+    </div>
+    ` : ""}
+
+    ${allComments && allComments.length ? `
+    <div class="card">
+      <h2>Comments (${allComments.length})</h2>
+      ${allComments.map(c => `<div class="post-item">
+        <div class="post-info">
+          <div class="pi-title"><strong>${escHtml(c.author_name)}</strong> on <em>${escHtml(c.post_slug)}</em></div>
+          <div class="pi-meta">${escHtml(c.body?.slice(0, 100) || "")}${c.body?.length > 100 ? "..." : ""} — ${escHtml(c.created_at?.slice(0, 10) || "")}</div>
+        </div>
+        <form method="POST" action="/admin/comment/delete" style="margin:0;">
+          <input type="hidden" name="id" value="${c.id}">
+          <button type="submit" class="btn-sm" onclick="return confirm('Delete this comment?')">Delete</button>
         </form>
       </div>`).join("")}
     </div>
