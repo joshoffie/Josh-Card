@@ -43,17 +43,25 @@ const images = {
 async function personalizedStrip(name, scale) {
   const base = scale === 2 ? images["strip@2x.png"] : images["strip.png"];
   if (!base) return null;
-  const w = scale === 2 ? 1125 : 563;
-  const h = scale === 2 ? 432 : 216;
-  const fontSize = scale === 2 ? 72 : 36;
   const x = scale === 2 ? 60 : 30;
-  const y = scale === 2 ? 260 : 130;
+  const y = scale === 2 ? 200 : 100;
+  const dpi = scale === 2 ? 200 : 100;
 
-  const svg = `<svg width="${w}" height="${h}">
-    <text x="${x}" y="${y}" font-size="${fontSize}" font-family="Helvetica, Arial, sans-serif" font-weight="300" fill="#000000">${name.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</text>
-  </svg>`;
+  // Use sharp's built-in text rendering (Pango) — works without custom fonts
+  const escapedName = name.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const textBuf = await sharp({
+    text: {
+      text: `<span foreground="#000000" size="48000">${escapedName}</span>`,
+      font: "sans-serif",
+      rgba: true,
+      dpi,
+    }
+  }).png().toBuffer();
 
-  return sharp(base).composite([{ input: Buffer.from(svg), top: 0, left: 0 }]).png().toBuffer();
+  return sharp(base)
+    .composite([{ input: textBuf, top: y, left: x }])
+    .png()
+    .toBuffer();
 }
 
 // ---------------------------------------------------------------------------
