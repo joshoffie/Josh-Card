@@ -85,7 +85,7 @@ export default async function buildPkpass({ name, email, serial, source }) {
 
   pkpass.primaryFields.push({
     key: "fanName",
-    label: "FAN",
+    label: "",
     value: name,
   });
 
