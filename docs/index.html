@@ -118,6 +118,37 @@
 
     .empty { text-align: center; color: #444; padding: 3rem; font-size: 0.95rem; }
 
+    /* --- LIGHTBOX --- */
+    .lightbox {
+      display: none; position: fixed; inset: 0; z-index: 9999;
+      background: rgba(0,0,0,0.92); align-items: center; justify-content: center;
+      flex-direction: column; padding: 1rem; cursor: pointer;
+    }
+    .lightbox.open { display: flex; }
+    .lightbox img, .lightbox video {
+      max-width: 95vw; max-height: 85vh; border-radius: 8px; object-fit: contain;
+    }
+    .lightbox-close {
+      position: absolute; top: 1rem; right: 1.5rem; font-size: 2rem;
+      color: #fff; background: none; border: none; cursor: pointer; z-index: 10000;
+    }
+
+    /* --- EXPANDED POST --- */
+    .post.expanded {
+      position: fixed; inset: 1rem; z-index: 500; max-width: 800px;
+      margin: auto; overflow-y: auto; padding: 2rem;
+      border-color: #333; animation: expandIn 0.2s ease;
+    }
+    .post.expanded .collage img, .post.expanded .collage video {
+      max-height: 600px;
+    }
+    .post-overlay {
+      display: none; position: fixed; inset: 0; z-index: 499;
+      background: rgba(0,0,0,0.7);
+    }
+    .post-overlay.open { display: block; }
+    @keyframes expandIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
   </style>
 </head>
 <body>
@@ -131,6 +162,11 @@
 
   <div class="container">
     <div id="feed"></div>
+  </div>
+  <div class="post-overlay" id="postOverlay" onclick="collapsePost()"></div>
+  <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+    <button class="lightbox-close">&times;</button>
+    <div id="lightbox-content"></div>
   </div>
 
 
@@ -150,6 +186,10 @@
       return dt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
     }
 
+    function isVideo(url) {
+      return /\.(mp4|mov|webm)/i.test(url) || /\/video\/upload\//i.test(url);
+    }
+
     function renderMedia(post) {
       if (!post.mediaUrl) return "";
 
@@ -161,8 +201,8 @@
         const count = urls.length;
         const cls = count <= 3 ? `c${count}` : "";
         const imgs = urls.map(u => {
-          if (u.match(/\.(mp4|mov|webm)/i)) return `<video src="${escHtml(u)}" controls></video>`;
-          return `<img src="${escHtml(u)}" alt="">`;
+          if (isVideo(u)) return `<video src="${escHtml(u)}" controls playsinline preload="metadata" onclick="event.stopPropagation()"></video>`;
+          return `<img src="${escHtml(u)}" alt="" onclick="openLightbox('${escHtml(u)}', 'image'); event.stopPropagation();">`;
         }).join("");
         return `<div class="collage ${cls}">${imgs}</div>`;
       }
@@ -181,8 +221,8 @@
       }
       if (post.type === "video") {
         let src = post.mediaUrl;
-        if (src.match(/\.(mp4|mov|webm)/i)) {
-          return `<video src="${escHtml(src)}" class="post-video" controls></video>`;
+        if (isVideo(src)) {
+          return `<video src="${escHtml(src)}" class="post-video" controls playsinline preload="metadata"></video>`;
         }
         const yt = src.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?]+)/);
         if (yt) src = "https://www.youtube.com/embed/" + yt[1];
@@ -328,7 +368,7 @@
           feed.innerHTML = '<div class="empty">Nothing here yet.</div>';
           return;
         }
-        feed.innerHTML = posts.map(p => `<div class="post">
+        feed.innerHTML = posts.map(p => `<div class="post" onclick="expandPost(this)">
           ${p.title ? `<div class="post-title">${escHtml(p.title)}</div>` : ""}
           <div class="post-date">${formatDate(p.date)}</div>
           ${p.body ? `<div class="post-body">${escHtml(p.body).replace(/\n/g, "<br>")}</div>` : ""}
@@ -336,6 +376,41 @@
           ${renderComments(p.slug)}
         </div>`).join("");
       });
+
+    // --- Expand post on click ---
+    let expandedPost = null;
+    function expandPost(el) {
+      if (expandedPost === el) return;
+      collapsePost();
+      el.classList.add("expanded");
+      document.getElementById("postOverlay").classList.add("open");
+      expandedPost = el;
+    }
+    function collapsePost() {
+      if (expandedPost) {
+        expandedPost.classList.remove("expanded");
+        expandedPost = null;
+      }
+      document.getElementById("postOverlay").classList.remove("open");
+    }
+    document.addEventListener("keydown", e => { if (e.key === "Escape") { collapsePost(); closeLightbox(); } });
+
+    // --- Lightbox for images ---
+    function openLightbox(src, type) {
+      const lb = document.getElementById("lightbox");
+      const content = document.getElementById("lightbox-content");
+      if (type === "image") {
+        content.innerHTML = `<img src="${src}" alt="">`;
+      } else {
+        content.innerHTML = `<video src="${src}" controls autoplay style="max-width:95vw;max-height:85vh;border-radius:8px;"></video>`;
+      }
+      lb.classList.add("open");
+    }
+    function closeLightbox() {
+      const lb = document.getElementById("lightbox");
+      lb.classList.remove("open");
+      document.getElementById("lightbox-content").innerHTML = "";
+    }
   </script>
 </body>
 </html>
