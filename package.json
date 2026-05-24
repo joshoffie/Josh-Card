@@ -16,8 +16,7 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
-    "passkit-generator": "^3.3.0",
-    "@napi-rs/canvas": "^0.1.53"
+    "passkit-generator": "^3.3.0"
   },
   "engines": {
     "node": ">=18.0.0"
