@@ -45,7 +45,7 @@ export const CFG = {
   apnsHost:       process.env.APNS_HOST || "https://api.push.apple.com",
   port:           parseInt(process.env.PORT || "3000", 10),
   webServiceUrl:  process.env.WEB_SERVICE_URL,
-  artistName:     process.env.ARTIST_NAME || "Fan Card",
+  artistName:     process.env.ARTIST_NAME || "Josh Card",
 };
 
 // ---------------------------------------------------------------------------
