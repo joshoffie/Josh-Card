@@ -32,8 +32,8 @@ const images = {
   "icon@2x.png":      tryImage("icon@2x.png"),
   "logo.png":         tryImage("logo.png"),
   "logo@2x.png":      tryImage("logo@2x.png"),
-  "thumbnail.png":    tryImage("strip.png"),
-  "thumbnail@2x.png": tryImage("strip@2x.png"),
+  "thumbnail.png":    tryImage("thumbnail_1x.png"),
+  "thumbnail@2x.png": tryImage("thumbnail_2x.png"),
 };
 
 // ---------------------------------------------------------------------------
