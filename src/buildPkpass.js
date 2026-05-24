@@ -63,6 +63,7 @@ export default async function buildPkpass({ name, email, serial, source }) {
       foregroundColor:     "rgb(0, 0, 0)",
       backgroundColor:     "rgb(251, 242, 234)",
       labelColor:          "rgb(80, 80, 80)",
+      logoText:            "Josh Card",
       webServiceURL:       CFG.webServiceUrl,
       authenticationToken: authToken,
     }
