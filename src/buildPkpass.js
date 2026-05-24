@@ -58,8 +58,8 @@ export default async function buildPkpass({ name, email, serial, source }) {
       serialNumber:        serial,
       passTypeIdentifier:  CFG.passTypeId,
       teamIdentifier:      CFG.teamId,
-      organizationName:    CFG.artistName,
-      description:         `${CFG.artistName} Fan Card`,
+      organizationName:    "Josh Card",
+      description:         "Josh Card",
       foregroundColor:     "rgb(0, 0, 0)",
       backgroundColor:     "rgb(251, 242, 234)",
       labelColor:          "rgb(80, 80, 80)",
@@ -91,7 +91,7 @@ export default async function buildPkpass({ name, email, serial, source }) {
 
   pkpass.secondaryFields.push({
     key: "latestDrop",
-    label: "LATEST DROP",
+    label: "NEW SINGLE",
     value: content?.latest_drop || "Stay tuned...",
     // changeMessage triggers lock-screen notification on update
     changeMessage: "New drop: %@",
