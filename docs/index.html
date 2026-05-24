@@ -80,6 +80,11 @@
 
     /* --- COMMENTS --- */
     .comments-section { margin-top: 1rem; border-top: 1px solid #1a1a1a; padding-top: 1rem; }
+    .comments-toggle {
+      font-size: 0.8rem; color: #555; cursor: pointer; background: none;
+      border: none; font-family: inherit; padding: 0.4rem 0; display: block;
+    }
+    .comments-toggle:hover { color: #888; }
     .comments-list { margin-top: 0.75rem; }
     .comment {
       padding: 0.6rem 0; border-bottom: 1px solid #151515;
@@ -241,9 +246,14 @@
     }
 
 
-    function renderCommentTree(comments, slug) {
+    const INITIAL_COMMENTS = 3;
+
+    function renderCommentTree(comments, slug, showAll) {
       const topLevel = comments.filter(c => !c.parent_id);
       const replies = comments.filter(c => c.parent_id);
+
+      // Sort top-level by most liked first, then newest
+      topLevel.sort((a, b) => (b.likes || 0) - (a.likes || 0) || new Date(b.created_at) - new Date(a.created_at));
 
       function getReplies(parentId) {
         return replies.filter(c => c.parent_id === parentId);
@@ -268,22 +278,38 @@
         </div>`;
       }
 
-      return topLevel.map(c => renderOne(c, 0)).join("");
+      const visible = showAll ? topLevel : topLevel.slice(0, INITIAL_COMMENTS);
+      const html = visible.map(c => renderOne(c, 0)).join("");
+      const remaining = topLevel.length - INITIAL_COMMENTS;
+
+      if (!showAll && remaining > 0) {
+        return html + `<button class="comments-toggle" onclick="expandComments('${slug}')">View ${remaining} more comment${remaining > 1 ? 's' : ''}</button>`;
+      }
+      return html;
     }
 
-    async function loadComments(slug) {
+    const commentsCache = {};
+
+    async function loadComments(slug, showAll) {
       const list = document.getElementById("clist-" + slug);
       try {
         const res = await fetch(API_BASE + "/api/comments/" + slug);
         const comments = await res.json();
+        commentsCache[slug] = comments;
         if (!comments.length) {
           list.innerHTML = '<p style="font-size:0.8rem; color:#444; padding:0.5rem 0;">No comments yet.</p>';
           return;
         }
-        list.innerHTML = renderCommentTree(comments, slug);
+        list.innerHTML = renderCommentTree(comments, slug, !!showAll);
       } catch(e) {
         list.innerHTML = '<p style="color:#555; font-size:0.8rem;">Could not load comments.</p>';
       }
+    }
+
+    function expandComments(slug) {
+      const list = document.getElementById("clist-" + slug);
+      const comments = commentsCache[slug] || [];
+      list.innerHTML = renderCommentTree(comments, slug, true);
     }
 
     function showReplyForm(parentId, slug) {
