@@ -1,7 +1,7 @@
 import { PKPass } from "passkit-generator";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import sharp from "sharp";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { CFG, authTokenFor, getCurrentContent } from "./store.js";
 
 // ---------------------------------------------------------------------------
@@ -43,25 +43,25 @@ const images = {
 async function personalizedStrip(name, scale) {
   const base = scale === 2 ? images["strip@2x.png"] : images["strip.png"];
   if (!base) return null;
+  const w = scale === 2 ? 1125 : 563;
+  const h = scale === 2 ? 432 : 216;
+  const fontSize = scale === 2 ? 80 : 40;
   const x = scale === 2 ? 60 : 30;
-  const y = scale === 2 ? 200 : 100;
-  const dpi = scale === 2 ? 200 : 100;
+  const y = scale === 2 ? 280 : 140;
 
-  // Use sharp's built-in text rendering (Pango) — works without custom fonts
-  const escapedName = name.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-  const textBuf = await sharp({
-    text: {
-      text: `<span foreground="#000000" size="48000">${escapedName}</span>`,
-      font: "sans-serif",
-      rgba: true,
-      dpi,
-    }
-  }).png().toBuffer();
+  const canvas = createCanvas(w, h);
+  const ctx = canvas.getContext("2d");
 
-  return sharp(base)
-    .composite([{ input: textBuf, top: y, left: x }])
-    .png()
-    .toBuffer();
+  // Draw the base strip image
+  const baseImg = await loadImage(base);
+  ctx.drawImage(baseImg, 0, 0, w, h);
+
+  // Draw the name in black
+  ctx.fillStyle = "#000000";
+  ctx.font = `300 ${fontSize}px sans-serif`;
+  ctx.fillText(name, x, y);
+
+  return canvas.toBuffer("image/png");
 }
 
 // ---------------------------------------------------------------------------
