@@ -27,10 +27,18 @@
       padding: 1.5rem 1rem; display: flex; flex-direction: column; z-index: 100; }
     .main { margin-left: 240px; flex: 1; max-width: 620px; margin-right: auto; padding: 0 1.5rem; }
 
-      .sidebar.mobile-open { display: flex; width: 100%; z-index: 999; }
-      .main { margin-left: 0; max-width: 100%; }
+    @media (max-width: 768px) {
+      .sidebar { display: none !important; }
+      .main { margin-left: 0 !important; max-width: 100% !important; padding: 0 0.75rem !important; padding-bottom: 70px !important; }
       .mobile-header { display: flex !important; }
+      .mobile-nav { display: flex !important; }
+      .post { padding: 1rem; }
+      .section-header { padding: 0.75rem 0 0.5rem; }
+      .section-header h2 { font-size: 1.05rem; }
+      .chat-view { height: calc(100vh - 130px); }
     }
+
+
 
     /* --- Sidebar --- */
     .logo { font-size: 1.3rem; font-weight: 700; color: var(--white); margin-bottom: 2rem;
