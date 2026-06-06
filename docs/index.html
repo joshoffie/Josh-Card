@@ -25,14 +25,8 @@
     .sidebar { width: 240px; position: fixed; top: 0; left: 0; bottom: 0;
       background: var(--surface); border-right: 1px solid var(--border);
       padding: 1.5rem 1rem; display: flex; flex-direction: column; z-index: 100; }
-    .main { margin-left: 240px; flex: 1; max-width: 600px; padding: 0 1rem; }
-    .right-panel { position: fixed; right: 0; top: 0; bottom: 0; width: 280px;
-      background: var(--surface); border-left: 1px solid var(--border);
-      padding: 1.5rem 1rem; overflow-y: auto; }
+    .main { margin-left: 240px; flex: 1; max-width: 620px; margin-right: auto; padding: 0 1.5rem; }
 
-    @media (max-width: 1000px) { .right-panel { display: none; } }
-    @media (max-width: 768px) {
-      .sidebar { display: none; }
       .sidebar.mobile-open { display: flex; width: 100%; z-index: 999; }
       .main { margin-left: 0; max-width: 100%; }
       .mobile-header { display: flex !important; }
@@ -73,8 +67,9 @@
     /* --- Cards / Posts --- */
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
       padding: 1rem 1.25rem; margin-bottom: 0.75rem; }
-    .post { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 1.25rem; margin-bottom: 0.75rem; }
+    .post { background: #131313; border: 1px solid #1e1e1e; border-radius: 12px;
+      padding: 1.5rem; margin-bottom: 1.25rem; transition: border-color 0.2s; }
+    .post:hover { border-color: #2a2a2a; }
     .post-header { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem; }
     .post-author { font-weight: 600; color: var(--white); font-size: 0.9rem; cursor: pointer; }
     .post-author:hover { text-decoration: underline; }
@@ -511,7 +506,7 @@ function render() {
         <div style="width:24px;"></div>
       </div>
       <div class="main">${content}</div>
-      ${state.view === "feed" ? renderRightPanel() : ""}
+      
     </div>
   `;
 }
@@ -541,6 +536,15 @@ function renderSidebar() {
       <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
       Get Josh Card
     </a>
+    <div style="margin-top:1rem;margin-bottom:1rem;">
+      <input type="text" placeholder="Search people..." style="width:100%;padding:0.5rem 0.7rem;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:0.8rem;" oninput="doSearch(this.value)">
+      <div id="sidebar-search" style="margin-top:0.4rem;">${state.searchResults.map(u => `
+        <div class="friend-item" style="cursor:pointer;padding:0.3rem 0.2rem;" onclick="loadProfile('${esc(u.username)}')">
+          ${avatarHtml(u, 'sm')}
+          <span class="name" style="font-size:0.8rem;">@${esc(u.username)}</span>
+        </div>
+      `).join('')}</div>
+    </div>
     <div class="sidebar-user" onclick="loadProfile('${esc(state.user?.username || "")}')">
       ${avatarHtml(state.user, "sm")}
       <div>
@@ -551,29 +555,7 @@ function renderSidebar() {
   </div>`;
 }
 
-function renderRightPanel() {
-  return `<div class="right-panel">
-    <div class="panel-title">Search People</div>
-    <input type="text" placeholder="Find someone..." style="width:100%;padding:0.5rem;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:0.85rem;margin-bottom:0.75rem;"
-      oninput="doSearch(this.value)">
-    <div id="search-results">${state.searchResults.map(u => `
-      <div class="friend-item" style="cursor:pointer;" onclick="loadProfile('${esc(u.username)}')">
-        ${avatarHtml(u, "sm")}
-        <span class="name">@${esc(u.username)}</span>
-      </div>
-    `).join("")}</div>
-    ${state.friends.length ? `
-      <div class="divider"></div>
-      <div class="panel-title">Friends</div>
-      ${state.friends.map(f => `
-        <div class="friend-item" onclick="loadProfile('${esc(f.username)}')" style="cursor:pointer;">
-          ${avatarHtml(f, "sm")}
-          <span class="name">${esc(f.display_name || f.username)}</span>
-        </div>
-      `).join("")}
-    ` : ""}
-  </div>`;
-}
+
 
 // ---------------------------------------------------------------------------
 // Auth views
@@ -660,9 +642,7 @@ function renderFeed() {
 
 function renderPost(p) {
   const deleteBtn = (state.user && p.user_id === state.user.id && !p.isJosh)
-    ? `<button class="post-action" onclick="doDeletePost(${p.id})" style="margin-left:auto;color:var(--danger);">
-        <svg viewBox="0 0 24 24" style="width:16px;height:16px;"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-       </button>` : "";
+    ? `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();doDeletePost(${p.id})" style="margin-left:auto;">Delete</button>` : "";
 
   return `<div class="post">
     <div class="post-header">
