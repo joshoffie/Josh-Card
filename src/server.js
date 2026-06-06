@@ -1,3 +1,4 @@
+import socialRoutes from "./socialRoutes.js";
 import express from "express";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
@@ -17,6 +18,7 @@ import { pushToAll } from "./apns.js";
 
 const app = express();
 app.use(express.json());
+app.use("/api/social", socialRoutes);
 app.use("/public", express.static(resolve("public")));
 
 // Cloudinary config

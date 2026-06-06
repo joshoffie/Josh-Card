@@ -10,6 +10,7 @@
     "dev": "node --watch src/server.js"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^11.7.0",
     "cloudinary": "^2.5.1",
     "dotenv": "^16.4.7",
