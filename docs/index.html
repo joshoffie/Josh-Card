@@ -25,11 +25,11 @@
     .sidebar { width: 240px; position: fixed; top: 0; left: 0; bottom: 0;
       background: var(--surface); border-right: 1px solid var(--border);
       padding: 1.5rem 1rem; display: flex; flex-direction: column; z-index: 100; }
-    .main { margin-left: 240px; flex: 1; max-width: 600px; padding: 0 1.5rem; }
+    .main { margin-left: 240px; flex: 1; max-width: 600px; padding: 0 1.5rem; margin: 0 auto; }
 
     @media (max-width: 768px) {
       .sidebar { display: none !important; }
-      .main { margin-left: 0 !important; max-width: 100% !important; padding: 0 0.75rem !important; padding-bottom: 70px !important; }
+      .main { margin-left: 0 !important; max-width: 100% !important; padding: 0 1rem !important; padding-bottom: 70px !important; margin: 0 auto !important; }
       .mobile-header { display: flex !important; }
       .mobile-nav { display: flex !important; }
       .post { padding: 1rem; }
@@ -757,6 +757,10 @@ function renderFriendsPage() {
   loadFriends();
   return `
     <div class="section-header"><h2>Friends</h2></div>
+    <div class="card">
+      <input type="text" placeholder="Search for people..." style="width:100%;padding:0.65rem 0.9rem;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:0.9rem;" oninput="doFriendSearch(this.value)" id="friend-search">
+      <div id="friend-search-results"></div>
+    </div>
     ${state.pendingRequests.length ? `
       <div class="card">
         <div class="panel-title">Friend Requests</div>
@@ -794,6 +798,10 @@ function renderMessages() {
   loadConversations();
   return `
     <div class="section-header"><h2>Messages</h2></div>
+    <div class="card">
+      <input type="text" placeholder="Search for people to message..." style="width:100%;padding:0.65rem 0.9rem;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:0.9rem;" oninput="doMessageSearch(this.value)" id="msg-search">
+      <div id="msg-search-results"></div>
+    </div>
     <div class="card convo-list">
       ${state.conversations.length ? state.conversations.map(c => `
         <div class="convo-item" onclick="loadChat(${c.id})">
@@ -868,6 +876,38 @@ function renderSettings() {
       <button class="btn btn-danger btn-block" onclick="doLogout()">Log Out</button>
     </div>
   `;
+}
+
+// ---------------------------------------------------------------------------
+// Friends/Messages search
+// ---------------------------------------------------------------------------
+async function doFriendSearch(q) {
+  const container = document.getElementById('friend-search-results');
+  if (!container || q.length < 1) { if (container) container.innerHTML = ''; return; }
+  try {
+    const results = await api('/api/social/users/search?q=' + encodeURIComponent(q));
+    container.innerHTML = results.filter(u => u.id !== state.user.id).map(u => {
+      return '<div style="display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0;border-bottom:1px solid var(--border);">' +
+        avatarHtml(u, 'sm') +
+        '<span style="flex:1;cursor:pointer;font-size:0.9rem;" onclick="loadProfile(\'' + esc(u.username) + '\')">' + esc(u.display_name || u.username) + ' <span style="color:var(--text3);">@' + esc(u.username) + '</span></span>' +
+        '<button class="btn btn-primary btn-sm" onclick="doFriendRequest(' + u.id + ')">Add</button>' +
+      '</div>';
+    }).join('') || '<div class="empty" style="padding:0.5rem 0;">No users found</div>';
+  } catch(e) {}
+}
+
+async function doMessageSearch(q) {
+  const container = document.getElementById('msg-search-results');
+  if (!container || q.length < 1) { if (container) container.innerHTML = ''; return; }
+  try {
+    const results = await api('/api/social/users/search?q=' + encodeURIComponent(q));
+    container.innerHTML = results.filter(u => u.id !== state.user.id).map(u => {
+      return '<div style="display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="loadChat(' + u.id + ')">' +
+        avatarHtml(u, 'sm') +
+        '<span style="flex:1;font-size:0.9rem;">' + esc(u.display_name || u.username) + ' <span style="color:var(--text3);">@' + esc(u.username) + '</span></span>' +
+      '</div>';
+    }).join('') || '<div class="empty" style="padding:0.5rem 0;">No users found</div>';
+  } catch(e) {}
 }
 
 // ---------------------------------------------------------------------------
