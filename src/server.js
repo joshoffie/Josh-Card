@@ -3,6 +3,7 @@ import express from "express";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import { resolve } from "node:path";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import {
   CFG, db,
   authTokenFor, verifyAuth,
@@ -28,6 +29,34 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+// =========================================================================
+// Admin auth — every admin-only route goes through these helpers.
+// If ADMIN_PASSWORD is not set, admin actions are disabled (never open).
+// =========================================================================
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+if (!ADMIN_PASSWORD) console.warn("ADMIN_PASSWORD is not set — admin routes and /broadcast are disabled.");
+
+function safeEqual(a, b) {
+  const x = Buffer.from(String(a ?? ""));
+  const y = Buffer.from(String(b ?? ""));
+  return x.length === y.length && timingSafeEqual(x, y);
+}
+
+// For API calls: Authorization header must equal ADMIN_PASSWORD
+function isAdminRequest(req) {
+  return !!ADMIN_PASSWORD && safeEqual(req.headers.authorization, ADMIN_PASSWORD);
+}
+
+function requireAdminHeader(req, res, next) {
+  if (!isAdminRequest(req)) return res.status(401).json({ error: "unauthorized" });
+  next();
+}
+
+// Session cookie for the /admin dashboard: an HMAC, not the password itself
+const ADMIN_COOKIE = ADMIN_PASSWORD
+  ? createHmac("sha256", ADMIN_PASSWORD).update("josh-card-admin-session-v1").digest("hex")
+  : "";
 
 // CORS for GitHub Pages blog
 app.use("/api/comments", (req, res, next) => {
@@ -69,10 +98,7 @@ app.get("/api/posts", (req, res) => {
 });
 
 // Admin: create post with optional media (from blog drag-and-drop)
-app.post("/api/posts", upload.array("media", 20), async (req, res) => {
-  const pw = req.headers.authorization;
-  if (pw !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: "unauthorized" });
-
+async function createPostHandler(req, res) {
   const { title, body, type } = req.body;
   const files = req.files || [];
   const urls = [];
@@ -106,13 +132,11 @@ app.post("/api/posts", upload.array("media", 20), async (req, res) => {
 
   const post = createPost(postType, title || "", body || "", mediaUrl);
   res.status(201).json({ ...post, urls });
-});
+}
+app.post("/api/posts", requireAdminHeader, upload.array("media", 20), createPostHandler);
 
 // Admin: upload media files only (returns URLs)
-app.post("/api/upload", upload.array("media", 20), async (req, res) => {
-  const pw = req.headers.authorization;
-  if (pw !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: "unauthorized" });
-
+app.post("/api/upload", requireAdminHeader, upload.array("media", 20), async (req, res) => {
   const files = req.files || [];
   if (!files.length) return res.status(400).json({ error: "no files" });
 
@@ -163,9 +187,7 @@ app.post("/api/comments/:id/like", (req, res) => {
 });
 
 // Admin delete comment (requires ADMIN_PASSWORD in Authorization header)
-app.delete("/api/comments/:id", (req, res) => {
-  const pw = req.headers.authorization;
-  if (pw !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: "unauthorized" });
+app.delete("/api/comments/:id", requireAdminHeader, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "invalid id" });
   removeComment(id);
@@ -268,7 +290,8 @@ app.get("/issue", async (req, res) => {
 
 // --- Broadcast update to all fans ---------------------------------------
 // POST /broadcast { latestDrop, dropDate, listenUrl, message }
-app.post("/broadcast", async (req, res) => {
+// Requires header  Authorization: <ADMIN_PASSWORD>
+app.post("/broadcast", requireAdminHeader, async (req, res) => {
   try {
     const { latestDrop, dropDate, listenUrl, message } = req.body;
 
@@ -312,25 +335,25 @@ app.post("/broadcast", async (req, res) => {
 // =========================================================================
 // ADMIN DASHBOARD — password-protected
 // =========================================================================
-const ADMIN_PASS = process.env.ADMIN_PASSWORD || "changeme";
-
 function requireAdmin(req, res, next) {
-  // Check session cookie or query param
+  if (!ADMIN_PASSWORD) {
+    return res.status(503).send(renderAdminLogin("Admin is disabled until ADMIN_PASSWORD is set on the server."));
+  }
+  // Valid session cookie?
   const cookie = (req.headers.cookie || "").match(/admin_token=([^;]+)/);
-  const token = cookie?.[1];
-  if (token === Buffer.from(ADMIN_PASS).toString("base64")) return next();
-  // Show login form
-  if (req.method === "GET" && !req.query._pw) {
-    return res.send(renderAdminLogin());
+  if (cookie && safeEqual(cookie[1], ADMIN_COOKIE)) return next();
+
+  // Login form POST (password only accepted in the request body, never the URL)
+  if (req.method === "POST" && typeof req.body?.password === "string") {
+    if (safeEqual(req.body.password, ADMIN_PASSWORD)) {
+      const secure = req.headers["x-forwarded-proto"] === "https" ? "; Secure" : "";
+      res.setHeader("Set-Cookie", `admin_token=${ADMIN_COOKIE}; Path=/admin; HttpOnly; SameSite=Strict; Max-Age=86400${secure}`);
+      return next();
+    }
+    return res.status(401).send(renderAdminLogin("Wrong password"));
   }
-  // Check password from form POST or query
-  const pw = req.body?.password || req.query._pw;
-  if (pw === ADMIN_PASS) {
-    const tok = Buffer.from(ADMIN_PASS).toString("base64");
-    res.setHeader("Set-Cookie", `admin_token=${tok}; Path=/admin; HttpOnly; SameSite=Strict; Max-Age=86400`);
-    return next();
-  }
-  return res.send(renderAdminLogin("Wrong password"));
+  if (req.path.startsWith("/api/")) return res.status(401).json({ error: "unauthorized" });
+  return res.send(renderAdminLogin());
 }
 
 app.use("/admin", express.urlencoded({ extended: false }));
@@ -340,6 +363,9 @@ app.use("/admin", requireAdmin);
 app.post("/admin", (req, res) => {
   res.redirect("/admin");
 });
+
+// Dashboard upload (cookie-authenticated via requireAdmin) — same handler as /api/posts
+app.post("/admin/api/posts", upload.array("media", 20), createPostHandler);
 
 app.get("/admin", (req, res) => {
   const fans = db.prepare("SELECT COUNT(*) as c FROM passes").get().c;
@@ -886,9 +912,9 @@ function renderAdminPage({ fans, devices, content, recentFans, posts, allComment
 
           try {
             status.textContent = "Uploading " + pendingFiles.length + " file(s)...";
-            const res = await fetch("/api/posts", {
+            const res = await fetch("/admin/api/posts", {
               method: "POST",
-              headers: { "Authorization": "${escHtml(process.env.ADMIN_PASSWORD || "")}" },
+              credentials: "same-origin",
               body: form,
             });
             if (!res.ok) { const e = await res.json(); alert(e.error || "Upload failed"); return; }

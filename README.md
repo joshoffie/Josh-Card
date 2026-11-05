@@ -102,6 +102,7 @@ The repo is configured for Railway with `railway.json`. Connect your GitHub repo
 - `APNS_KEY_PATH` — path to .p8 (upload as a Railway volume or base64-encode)
 - `WEB_SERVICE_URL` — your Railway public URL
 - `ARTIST_NAME` — displayed on the card and fan page
+- `ADMIN_PASSWORD` — required for `/admin`, `/broadcast`, and posting as Josh. If unset, those are disabled.
 - `SIGNER_CERT`, `SIGNER_KEY`, `WWDR_CERT` — cert paths
 - `PORT` — Railway sets this automatically
 
@@ -115,7 +116,7 @@ Test in this order — each step depends on the previous one passing:
 
 1. **Build/sign:** `curl "https://your-app.up.railway.app/issue?name=Test&email=test@test.com" --output test.pkpass` → AirDrop to iPhone → tap → should show "Add"
 2. **Registration:** after adding, watch Railway logs for the registration POST from the device
-3. **Push:** `curl -X POST https://your-app.up.railway.app/broadcast -H "Content-Type: application/json" -d '{"latestDrop":"First Drop","dropDate":"2026-01-01","listenUrl":"https://spotify.com","message":"Welcome to the inner circle"}'` → lock screen should show "New drop: First Drop"
+3. **Push:** `curl -X POST https://your-app.up.railway.app/broadcast -H "Authorization: $ADMIN_PASSWORD" -H "Content-Type: application/json" -d '{"latestDrop":"First Drop","dropDate":"2026-01-01","listenUrl":"https://spotify.com","message":"Welcome to the inner circle"}'` → lock screen should show "New drop: First Drop"
 4. **Fan page:** open the "Fans Only" link from the back of the card → should show the exclusive content page
 
 ## API Reference
@@ -124,6 +125,7 @@ Test in this order — each step depends on the previous one passing:
 Mint and return a `.pkpass`. The `source` param is for attribution tracking.
 
 ### `POST /broadcast`
+Requires the header `Authorization: <ADMIN_PASSWORD>` (returns 401 without it). The admin dashboard at `/admin` does the same broadcast after you log in.
 ```json
 {
   "latestDrop": "Track Name",

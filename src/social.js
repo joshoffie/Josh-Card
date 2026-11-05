@@ -126,7 +126,15 @@ export function getProfileById(id) {
 }
 
 export function updateUserProfile(userId, displayName, bio, avatarUrl) {
-  updateProfile.run(displayName, bio, avatarUrl, userId);
+  displayName = String(displayName ?? "").trim();
+  bio = String(bio ?? "").trim();
+  if (displayName.length > 50) throw new Error("Display name must be 50 characters or fewer");
+  if (bio.length > 300) throw new Error("Bio must be 300 characters or fewer");
+  updateProfile.run(displayName, bio, avatarUrl || "", userId);
+}
+
+export function userExists(id) {
+  return Number.isInteger(id) && !!getUserById.get(id);
 }
 
 // ---------------------------------------------------------------------------
@@ -165,6 +173,7 @@ const listSentRequests = db.prepare(`
 
 export function sendFriendRequest(requesterId, addresseeId) {
   if (requesterId === addresseeId) throw new Error("Cannot friend yourself");
+  if (!userExists(addresseeId)) throw new Error("User not found");
   const existing = getFriendship.get(requesterId, addresseeId, addresseeId, requesterId);
   if (existing) {
     if (existing.status === "accepted") throw new Error("Already friends");
@@ -199,6 +208,12 @@ export function getSentRequests(userId) {
   return listSentRequests.all(userId);
 }
 
+// ID of a pending request sent BY otherUserId TO userId (null if none)
+export function getIncomingRequestId(userId, otherUserId) {
+  const f = getFriendship.get(userId, otherUserId, otherUserId, userId);
+  return f && f.status === "pending" && f.addressee_id === userId ? f.id : null;
+}
+
 export function getFriendshipStatus(userId, otherUserId) {
   const f = getFriendship.get(userId, otherUserId, otherUserId, userId);
   if (!f) return "none";
@@ -231,6 +246,9 @@ const feedPosts = db.prepare(`
 `);
 
 export function createUserPost(userId, body, mediaUrl) {
+  body = String(body ?? "").trim();
+  if (!body && !mediaUrl) throw new Error("Post can't be empty");
+  if (body.length > 5000) throw new Error("Post must be 5,000 characters or fewer");
   const info = insertUserPost.run(userId, body, mediaUrl || "");
   return { id: info.lastInsertRowid, user_id: userId, body, media_url: mediaUrl, created_at: new Date().toISOString() };
 }
@@ -287,6 +305,8 @@ const unreadCount = db.prepare(
 export function sendMessage(senderId, receiverId, body) {
   if (!body?.trim()) throw new Error("Message cannot be empty");
   if (body.length > 2000) throw new Error("Message too long");
+  if (senderId === receiverId) throw new Error("You can't message yourself");
+  if (!userExists(receiverId)) throw new Error("User not found");
   const info = insertMsg.run(senderId, receiverId, body.trim());
   return { id: info.lastInsertRowid, sender_id: senderId, receiver_id: receiverId, body: body.trim(), created_at: new Date().toISOString() };
 }
@@ -308,9 +328,10 @@ export function getUnreadCount(userId) {
 // Search users
 // ---------------------------------------------------------------------------
 const searchUsers = db.prepare(
-  "SELECT id, username, display_name, avatar_url FROM users WHERE username LIKE ? LIMIT 20"
+  "SELECT id, username, display_name, avatar_url FROM users WHERE username LIKE ? ESCAPE '\\' LIMIT 20"
 );
 
 export function findUsers(query) {
-  return searchUsers.all(`%${query}%`);
+  const escaped = String(query).slice(0, 50).replace(/[\\%_]/g, (c) => "\\" + c);
+  return searchUsers.all(`%${escaped}%`);
 }

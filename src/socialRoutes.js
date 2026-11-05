@@ -8,7 +8,7 @@ import {
   registerUser, loginUser, logoutUser, getSessionUser,
   getPublicProfile, getProfileById, updateUserProfile,
   sendFriendRequest, acceptFriendRequest, rejectFriendRequest, removeFriend,
-  getFriends, getPendingRequests, getSentRequests, getFriendshipStatus,
+  getFriends, getPendingRequests, getSentRequests, getFriendshipStatus, getIncomingRequestId, userExists,
   createUserPost, getUserPosts, deleteUserPostById, getFeedPosts,
   sendMessage, getMessages, getConversations, getUnreadCount,
   findUsers,
@@ -76,19 +76,20 @@ router.get("/auth/me", requireAuth, (req, res) => {
 });
 
 // ---- Profiles ----
-router.get("/users/search", (req, res) => {
+router.get("/users/search", requireAuth, (req, res) => {
   const q = req.query.q;
   if (!q || q.length < 1) return res.json([]);
   res.json(findUsers(q));
 });
 
-router.get("/users/:username", (req, res) => {
+router.get("/users/:username", requireAuth, (req, res) => {
   const profile = getPublicProfile(req.params.username);
   if (!profile) return res.status(404).json({ error: "User not found" });
-  const friendStatus = req.user ? getFriendshipStatus(req.user.id, profile.id) : "none";
+  const friendStatus = getFriendshipStatus(req.user.id, profile.id);
+  const requestId = friendStatus === "pending" ? getIncomingRequestId(req.user.id, profile.id) : null;
   const posts = getUserPosts(profile.id, 50);
   const friends = getFriends(profile.id);
-  res.json({ ...profile, friend_status: friendStatus, posts, friends });
+  res.json({ ...profile, friend_status: friendStatus, request_id: requestId, posts, friends });
 });
 
 router.put("/profile", requireAuth, upload.single("avatar"), async (req, res) => {
@@ -198,8 +199,11 @@ router.get("/conversations", requireAuth, (req, res) => {
 });
 
 router.get("/messages/:userId", requireAuth, (req, res) => {
-  const msgs = getMessages(req.user.id, parseInt(req.params.userId));
-  const other = getProfileById(parseInt(req.params.userId));
+  const otherId = parseInt(req.params.userId);
+  if (!userExists(otherId)) return res.status(404).json({ error: "User not found" });
+  if (otherId === req.user.id) return res.status(400).json({ error: "You can't message yourself" });
+  const msgs = getMessages(req.user.id, otherId);
+  const other = getProfileById(otherId);
   res.json({ user: other, messages: msgs });
 });
 
