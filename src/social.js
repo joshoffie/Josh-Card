@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
-// Social features: users, sessions, friends, user posts, DMs
+// Accounts, sessions, friends, profiles
 // ---------------------------------------------------------------------------
 import { db } from "./store.js";
 import bcrypt from "bcryptjs";
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -37,69 +37,100 @@ db.exec(`
     UNIQUE(requester_id, addressee_id)
   );
 
+  -- Legacy tables (kept for history; no longer written to)
   CREATE TABLE IF NOT EXISTS user_posts (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id      INTEGER NOT NULL,
     body         TEXT DEFAULT '',
     media_url    TEXT DEFAULT '',
-    created_at   TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY (user_id) REFERENCES users(id)
+    created_at   TEXT DEFAULT (datetime('now'))
   );
-
   CREATE TABLE IF NOT EXISTS messages (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     sender_id    INTEGER NOT NULL,
     receiver_id  INTEGER NOT NULL,
     body         TEXT NOT NULL,
     is_read      INTEGER DEFAULT 0,
-    created_at   TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY (sender_id) REFERENCES users(id),
-    FOREIGN KEY (receiver_id) REFERENCES users(id)
+    created_at   TEXT DEFAULT (datetime('now'))
   );
 `);
+
+export function addColumn(table, col, def) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+}
+
+addColumn("users", "points", "INTEGER DEFAULT 0");
+addColumn("users", "status", "TEXT DEFAULT 'active'");        // active | suspended | banned
+addColumn("users", "status_reason", "TEXT DEFAULT ''");
+addColumn("users", "age_confirmed_at", "TEXT DEFAULT NULL");
+addColumn("users", "terms_accepted_at", "TEXT DEFAULT NULL");
+addColumn("users", "last_visit_day", "TEXT DEFAULT ''");
+addColumn("user_posts", "hidden", "INTEGER DEFAULT 0");
+
+// ---------------------------------------------------------------------------
+// Admin accounts (can post, moderate). Comma-separated usernames.
+// ---------------------------------------------------------------------------
+const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || "josh")
+  .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+
+export function isAdmin(user) {
+  return !!user && ADMIN_USERNAMES.includes(String(user.username).toLowerCase());
+}
+
+export function adminUser() {
+  return db.prepare(`SELECT ${PUBLIC_COLS} FROM users WHERE username = ? COLLATE NOCASE`).get(ADMIN_USERNAMES[0]);
+}
 
 // ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
 const SALT_ROUNDS = 10;
+const PUBLIC_COLS = "id, username, display_name, bio, avatar_url, created_at, points, status, (age_confirmed_at IS NOT NULL AND terms_accepted_at IS NOT NULL) AS confirmed";
 
 const insertUser = db.prepare(
-  "INSERT INTO users (username, password_hash, display_name) VALUES (?, ?, ?)"
+  `INSERT INTO users (username, password_hash, display_name, age_confirmed_at, terms_accepted_at)
+   VALUES (?, ?, ?, datetime('now'), datetime('now'))`
 );
 const getUserByUsername = db.prepare("SELECT * FROM users WHERE username = ? COLLATE NOCASE");
-const getUserById = db.prepare("SELECT id, username, display_name, bio, avatar_url, created_at FROM users WHERE id = ?");
+const getUserById = db.prepare(`SELECT ${PUBLIC_COLS} FROM users WHERE id = ?`);
 const insertSession = db.prepare("INSERT INTO sessions (token, user_id) VALUES (?, ?)");
 const getSession = db.prepare("SELECT * FROM sessions WHERE token = ?");
 const deleteSession = db.prepare("DELETE FROM sessions WHERE token = ?");
-const updateProfile = db.prepare(
-  "UPDATE users SET display_name = ?, bio = ?, avatar_url = ? WHERE id = ?"
-);
+const updateProfile = db.prepare("UPDATE users SET display_name = ?, bio = ?, avatar_url = ? WHERE id = ?");
 
-export async function registerUser(username, password) {
-  if (!username || username.length < 3 || username.length > 20) {
-    throw new Error("Username must be 3-20 characters");
+function safeEqual(a, b) {
+  const x = Buffer.from(String(a ?? "")), y = Buffer.from(String(b ?? ""));
+  return x.length === y.length && timingSafeEqual(x, y);
+}
+
+export async function registerUser(username, password, { ageConfirmed, termsAccepted, adminPassword } = {}) {
+  username = String(username || "").trim();
+  // Admin usernames are reserved: claiming one requires the server's ADMIN_PASSWORD
+  if (ADMIN_USERNAMES.includes(username.toLowerCase())) {
+    const pw = process.env.ADMIN_PASSWORD || "";
+    if (!pw || !safeEqual(adminPassword, pw)) throw new Error("That username is reserved");
   }
-  if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-    throw new Error("Username can only contain letters, numbers, and underscores");
-  }
-  if (!password || password.length < 6) {
-    throw new Error("Password must be at least 6 characters");
-  }
-  const existing = getUserByUsername.get(username);
-  if (existing) throw new Error("Username already taken");
+  if (!ageConfirmed) throw new Error("You must be 18 or older to join");
+  if (!termsAccepted) throw new Error("You need to agree to the community rules to join");
+  if (username.length < 3 || username.length > 20) throw new Error("Username must be 3-20 characters");
+  if (!/^[a-zA-Z0-9_]+$/.test(username)) throw new Error("Username can only contain letters, numbers, and underscores");
+  if (!password || password.length < 8) throw new Error("Password must be at least 8 characters");
+  if (getUserByUsername.get(username)) throw new Error("Username already taken");
 
   const hash = await bcrypt.hash(password, SALT_ROUNDS);
   const info = insertUser.run(username, hash, username);
   const token = randomBytes(32).toString("hex");
   insertSession.run(token, info.lastInsertRowid);
-  return { userId: info.lastInsertRowid, token };
+  return { userId: Number(info.lastInsertRowid), token };
 }
 
 export async function loginUser(username, password) {
-  const user = getUserByUsername.get(username);
+  const user = getUserByUsername.get(String(username || ""));
   if (!user) throw new Error("Invalid username or password");
-  const valid = await bcrypt.compare(password, user.password_hash);
+  const valid = await bcrypt.compare(String(password || ""), user.password_hash);
   if (!valid) throw new Error("Invalid username or password");
+  if (user.status === "banned") throw new Error("This account has been banned.");
   const token = randomBytes(32).toString("hex");
   insertSession.run(token, user.id);
   return { userId: user.id, token };
@@ -110,19 +141,28 @@ export function logoutUser(token) {
 }
 
 export function getSessionUser(token) {
+  if (!token) return null;
   const session = getSession.get(token);
   if (!session) return null;
-  return getUserById.get(session.user_id);
-}
-
-export function getPublicProfile(username) {
-  const user = getUserByUsername.get(username);
-  if (!user) return null;
-  return { id: user.id, username: user.username, display_name: user.display_name, bio: user.bio, avatar_url: user.avatar_url, created_at: user.created_at };
+  return getUserById.get(session.user_id) || null;
 }
 
 export function getProfileById(id) {
   return getUserById.get(id);
+}
+
+export function getPublicProfile(username) {
+  const user = getUserByUsername.get(String(username || ""));
+  if (!user) return null;
+  return getUserById.get(user.id);
+}
+
+export function userExists(id) {
+  return Number.isInteger(id) && !!getUserById.get(id);
+}
+
+export function isActive(user) {
+  return !!user && (user.status || "active") === "active";
 }
 
 export function updateUserProfile(userId, displayName, bio, avatarUrl) {
@@ -133,36 +173,47 @@ export function updateUserProfile(userId, displayName, bio, avatarUrl) {
   updateProfile.run(displayName, bio, avatarUrl || "", userId);
 }
 
-export function userExists(id) {
-  return Number.isInteger(id) && !!getUserById.get(id);
+// Accounts created before the 18+ / rules requirement confirm on next visit
+export function confirmAgeAndTerms(userId) {
+  db.prepare(`UPDATE users SET age_confirmed_at = COALESCE(age_confirmed_at, datetime('now')),
+    terms_accepted_at = COALESCE(terms_accepted_at, datetime('now')) WHERE id = ?`).run(userId);
+}
+
+export function setUserStatus(userId, status, reason = "") {
+  if (!["active", "suspended", "banned"].includes(status)) throw new Error("Invalid status");
+  db.prepare("UPDATE users SET status = ?, status_reason = ? WHERE id = ?").run(status, reason, userId);
+  if (status === "banned") db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+}
+
+// Daily visit — returns true the first time each UTC day
+export function markVisit(userId) {
+  const day = new Date().toISOString().slice(0, 10);
+  const r = db.prepare("UPDATE users SET last_visit_day = ? WHERE id = ? AND last_visit_day != ?").run(day, userId, day);
+  return r.changes > 0;
 }
 
 // ---------------------------------------------------------------------------
 // Friends
 // ---------------------------------------------------------------------------
-const insertFriendReq = db.prepare(
-  "INSERT OR IGNORE INTO friendships (requester_id, addressee_id) VALUES (?, ?)"
-);
+const insertFriendReq = db.prepare("INSERT OR IGNORE INTO friendships (requester_id, addressee_id) VALUES (?, ?)");
 const getFriendship = db.prepare(
   "SELECT * FROM friendships WHERE (requester_id = ? AND addressee_id = ?) OR (requester_id = ? AND addressee_id = ?)"
 );
-const acceptFriend = db.prepare(
-  "UPDATE friendships SET status = 'accepted' WHERE id = ? AND addressee_id = ?"
-);
-const rejectFriend = db.prepare(
-  "DELETE FROM friendships WHERE id = ? AND addressee_id = ?"
-);
+const acceptFriend = db.prepare("UPDATE friendships SET status = 'accepted' WHERE id = ? AND addressee_id = ? AND status = 'pending'");
+const rejectFriend = db.prepare("DELETE FROM friendships WHERE id = ? AND addressee_id = ? AND status = 'pending'");
 const listFriends = db.prepare(`
-  SELECT u.id, u.username, u.display_name, u.avatar_url FROM users u
+  SELECT u.id, u.username, u.display_name, u.avatar_url, u.created_at, u.points FROM users u
   JOIN friendships f ON (
     (f.requester_id = u.id AND f.addressee_id = ? AND f.status = 'accepted')
     OR (f.addressee_id = u.id AND f.requester_id = ? AND f.status = 'accepted')
   )
+  WHERE u.status != 'banned'
+  ORDER BY u.username COLLATE NOCASE
 `);
 const listPendingRequests = db.prepare(`
   SELECT f.id as request_id, u.id, u.username, u.display_name, u.avatar_url, f.created_at
   FROM friendships f JOIN users u ON f.requester_id = u.id
-  WHERE f.addressee_id = ? AND f.status = 'pending'
+  WHERE f.addressee_id = ? AND f.status = 'pending' AND u.status != 'banned'
   ORDER BY f.created_at DESC
 `);
 const listSentRequests = db.prepare(`
@@ -173,7 +224,8 @@ const listSentRequests = db.prepare(`
 
 export function sendFriendRequest(requesterId, addresseeId) {
   if (requesterId === addresseeId) throw new Error("Cannot friend yourself");
-  if (!userExists(addresseeId)) throw new Error("User not found");
+  const target = getUserById.get(addresseeId);
+  if (!target || target.status === "banned") throw new Error("User not found");
   const existing = getFriendship.get(requesterId, addresseeId, addresseeId, requesterId);
   if (existing) {
     if (existing.status === "accepted") throw new Error("Already friends");
@@ -183,17 +235,22 @@ export function sendFriendRequest(requesterId, addresseeId) {
 }
 
 export function acceptFriendRequest(requestId, userId) {
-  const result = acceptFriend.run(requestId, userId);
-  if (!result.changes) throw new Error("Request not found");
+  if (!acceptFriend.run(requestId, userId).changes) throw new Error("Request not found");
 }
 
 export function rejectFriendRequest(requestId, userId) {
-  const result = rejectFriend.run(requestId, userId);
-  if (!result.changes) throw new Error("Request not found");
+  if (!rejectFriend.run(requestId, userId).changes) throw new Error("Request not found");
 }
 
 export function removeFriend(userId, friendId) {
-  db.prepare("DELETE FROM friendships WHERE status = 'accepted' AND ((requester_id = ? AND addressee_id = ?) OR (requester_id = ? AND addressee_id = ?))").run(userId, friendId, friendId, userId);
+  db.prepare(
+    "DELETE FROM friendships WHERE status = 'accepted' AND ((requester_id = ? AND addressee_id = ?) OR (requester_id = ? AND addressee_id = ?))"
+  ).run(userId, friendId, friendId, userId);
+}
+
+export function areFriends(a, b) {
+  const f = getFriendship.get(a, b, b, a);
+  return !!f && f.status === "accepted";
 }
 
 export function getFriends(userId) {
@@ -208,7 +265,6 @@ export function getSentRequests(userId) {
   return listSentRequests.all(userId);
 }
 
-// ID of a pending request sent BY otherUserId TO userId (null if none)
 export function getIncomingRequestId(userId, otherUserId) {
   const f = getFriendship.get(userId, otherUserId, otherUserId, userId);
   return f && f.status === "pending" && f.addressee_id === userId ? f.id : null;
@@ -223,112 +279,10 @@ export function getFriendshipStatus(userId, otherUserId) {
 }
 
 // ---------------------------------------------------------------------------
-// User Posts
-// ---------------------------------------------------------------------------
-const insertUserPost = db.prepare(
-  "INSERT INTO user_posts (user_id, body, media_url) VALUES (?, ?, ?)"
-);
-const userPostsByUser = db.prepare(
-  "SELECT up.*, u.username, u.display_name, u.avatar_url FROM user_posts up JOIN users u ON up.user_id = u.id WHERE up.user_id = ? ORDER BY up.created_at DESC LIMIT ?"
-);
-const deleteUserPost = db.prepare(
-  "DELETE FROM user_posts WHERE id = ? AND user_id = ?"
-);
-const feedPosts = db.prepare(`
-  SELECT up.*, u.username, u.display_name, u.avatar_url FROM user_posts up
-  JOIN users u ON up.user_id = u.id
-  WHERE up.user_id = ? OR up.user_id IN (
-    SELECT CASE WHEN f.requester_id = ? THEN f.addressee_id ELSE f.requester_id END
-    FROM friendships f
-    WHERE (f.requester_id = ? OR f.addressee_id = ?) AND f.status = 'accepted'
-  )
-  ORDER BY up.created_at DESC LIMIT ?
-`);
-
-export function createUserPost(userId, body, mediaUrl) {
-  body = String(body ?? "").trim();
-  if (!body && !mediaUrl) throw new Error("Post can't be empty");
-  if (body.length > 5000) throw new Error("Post must be 5,000 characters or fewer");
-  const info = insertUserPost.run(userId, body, mediaUrl || "");
-  return { id: info.lastInsertRowid, user_id: userId, body, media_url: mediaUrl, created_at: new Date().toISOString() };
-}
-
-export function getUserPosts(userId, limit = 50) {
-  return userPostsByUser.all(userId, limit);
-}
-
-export function deleteUserPostById(postId, userId) {
-  return deleteUserPost.run(postId, userId);
-}
-
-export function getFeedPosts(userId, limit = 50) {
-  return feedPosts.all(userId, userId, userId, userId, limit);
-}
-
-// ---------------------------------------------------------------------------
-// Messages (DMs)
-// ---------------------------------------------------------------------------
-const insertMsg = db.prepare(
-  "INSERT INTO messages (sender_id, receiver_id, body) VALUES (?, ?, ?)"
-);
-const getConversation = db.prepare(`
-  SELECT m.*, 
-    s.username as sender_username, s.display_name as sender_display_name,
-    r.username as receiver_username, r.display_name as receiver_display_name
-  FROM messages m
-  JOIN users s ON m.sender_id = s.id
-  JOIN users r ON m.receiver_id = r.id
-  WHERE (m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?)
-  ORDER BY m.created_at ASC LIMIT ?
-`);
-const markRead = db.prepare(
-  "UPDATE messages SET is_read = 1 WHERE sender_id = ? AND receiver_id = ? AND is_read = 0"
-);
-const conversations = db.prepare(`
-  SELECT 
-    u.id, u.username, u.display_name, u.avatar_url,
-    m.body as last_message, m.created_at as last_message_at,
-    (SELECT COUNT(*) FROM messages WHERE sender_id = u.id AND receiver_id = ? AND is_read = 0) as unread
-  FROM users u
-  JOIN messages m ON m.id = (
-    SELECT id FROM messages 
-    WHERE (sender_id = u.id AND receiver_id = ?) OR (sender_id = ? AND receiver_id = u.id)
-    ORDER BY created_at DESC LIMIT 1
-  )
-  WHERE u.id != ?
-  ORDER BY m.created_at DESC
-`);
-const unreadCount = db.prepare(
-  "SELECT COUNT(*) as c FROM messages WHERE receiver_id = ? AND is_read = 0"
-);
-
-export function sendMessage(senderId, receiverId, body) {
-  if (!body?.trim()) throw new Error("Message cannot be empty");
-  if (body.length > 2000) throw new Error("Message too long");
-  if (senderId === receiverId) throw new Error("You can't message yourself");
-  if (!userExists(receiverId)) throw new Error("User not found");
-  const info = insertMsg.run(senderId, receiverId, body.trim());
-  return { id: info.lastInsertRowid, sender_id: senderId, receiver_id: receiverId, body: body.trim(), created_at: new Date().toISOString() };
-}
-
-export function getMessages(userId, otherUserId, limit = 100) {
-  markRead.run(otherUserId, userId);
-  return getConversation.all(userId, otherUserId, otherUserId, userId, limit);
-}
-
-export function getConversations(userId) {
-  return conversations.all(userId, userId, userId, userId);
-}
-
-export function getUnreadCount(userId) {
-  return unreadCount.get(userId).c;
-}
-
-// ---------------------------------------------------------------------------
-// Search users
+// Search users (literal match; banned accounts excluded)
 // ---------------------------------------------------------------------------
 const searchUsers = db.prepare(
-  "SELECT id, username, display_name, avatar_url FROM users WHERE username LIKE ? ESCAPE '\\' LIMIT 20"
+  "SELECT id, username, display_name, avatar_url FROM users WHERE username LIKE ? ESCAPE '\\' AND status != 'banned' LIMIT 20"
 );
 
 export function findUsers(query) {

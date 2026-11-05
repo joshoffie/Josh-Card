@@ -111,6 +111,8 @@ db.exec(`
 // Migrations — add columns if upgrading from older schema
 try { db.exec("ALTER TABLE comments ADD COLUMN parent_id INTEGER DEFAULT NULL"); } catch(e) {}
 try { db.exec("ALTER TABLE comments ADD COLUMN likes INTEGER DEFAULT 0"); } catch(e) {}
+try { db.exec("ALTER TABLE posts ADD COLUMN category TEXT DEFAULT ''"); } catch(e) {}
+try { db.exec("ALTER TABLE posts ADD COLUMN hidden INTEGER DEFAULT 0"); } catch(e) {}
 
 // ---------------------------------------------------------------------------
 // Auth token — deterministic HMAC of the serial, no storage needed
@@ -217,16 +219,20 @@ export function setContent(latestDrop, dropDate, listenUrl, message) {
 // Posts (fan-only blog feed)
 // ---------------------------------------------------------------------------
 const insertPost = db.prepare(`
-  INSERT INTO posts (post_type, title, body, media_url) VALUES (?, ?, ?, ?)
+  INSERT INTO posts (post_type, title, body, media_url, category) VALUES (?, ?, ?, ?, ?)
 `);
 const listPosts = db.prepare(
-  "SELECT * FROM posts ORDER BY created_at DESC LIMIT ?"
+  "SELECT * FROM posts WHERE COALESCE(hidden, 0) = 0 ORDER BY created_at DESC, id DESC LIMIT ?"
 );
-const deletePost = db.prepare("DELETE FROM posts WHERE id = ?");
+// Soft delete so comments/likes keep their history
+const deletePost = db.prepare("UPDATE posts SET hidden = 1 WHERE id = ?");
 const getPost = db.prepare("SELECT * FROM posts WHERE id = ?");
 
-export function createPost(postType, title, body, mediaUrl) {
-  const info = insertPost.run(postType, title, body, mediaUrl || "");
+export const CATEGORIES = ["software", "art", "music"];
+
+export function createPost(postType, title, body, mediaUrl, category = "") {
+  if (category && !CATEGORIES.includes(category)) throw new Error("Invalid category");
+  const info = insertPost.run(postType, title, body, mediaUrl || "", category || "");
   return getPost.get(info.lastInsertRowid);
 }
 
@@ -275,17 +281,19 @@ export function removeComment(id) {
 const SLUR_PATTERNS = [
   /\bn[i1!]gg[ae3]r?s?\b/i,
   /\bf[a@]gg?[o0]t?s?\b/i,
-  /\bk[i1!]ke?s?\b/i,
-  /\bsp[i1!]c?k?s?\b/i,
-  /\bch[i1!]nk?s?\b/i,
+  /\bk[i1!]kes?\b/i,
+  /\bsp[i1!](?:c|k|ck)s?\b/i,
+  /\bch[i1!]nks?\b/i,
   /\bw[e3]tb[a@]ck?s?\b/i,
   /\btr[a@]nn(?:y|ie)s?\b/i,
   /\br[e3]t[a@]rd?s?\b/i,
-  /\bcoon?s?\b/i,
-  /\bgook?s?\b/i,
-  /\bdyke?s?\b/i,
-  /\bhomo?s?\b/i,
+  /\bcoons?\b/i,
+  /\bgooks?\b/i,
+  /\bdykes?\b/i,
+  /\bhomos?\b(?!\s+(?:sapiens|erectus|habilis|neanderthalensis))/i,
 ];
+
+export const SLUR_REGEXES = SLUR_PATTERNS;
 
 export function containsSlurs(text) {
   return SLUR_PATTERNS.some(p => p.test(text));

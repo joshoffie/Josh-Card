@@ -141,3 +141,37 @@ Token-gated exclusive content page. The token is the pass's auth token — linke
 
 ### `GET /health`
 Returns `{ "status": "ok" }` — used by Railway health checks.
+
+---
+
+# Josh's Blog (joshsblog.org)
+
+The site in `docs/` (GitHub Pages) talks to this server's `/api/social` API.
+
+**Who can do what**
+- Guests: browse the Feed and the Software / Art / Music tabs, read comments.
+- Members (18+, must accept the rules): comment (text, GIPHY GIFs, images), like, earn points, friend people, DM friends, group chats, report.
+- Admins (`ADMIN_USERNAMES`, default `josh`): post from the site, moderation queue at `#/mod`.
+
+**Safety (free by default)**
+- Slurs in comments, messages, names, bios are blocked automatically.
+- Rule-based flags (phone numbers, links, payment apps, off-platform contact, statements of being under 18, age questions) put the item/chat in the admin queue.
+- Member images (comment images, uploaded GIFs, profile photos) are hidden until an admin approves them.
+- GIF search only returns PG-rated GIPHY results; comment/message GIFs must be GIPHY URLs.
+- Reports on comments, messages, and profiles; admins can remove content, ban/suspend, and read flagged or reported chats.
+- Rate limits on sign-up, login, comments, messages, friend requests, reports.
+- Optional: set `OPENAI_API_KEY` to add OpenAI's moderation model (free endpoint). Clean images are then auto-approved (GIFs still go to review). Child-safety text hits auto-suspend the account.
+
+**Environment variables**
+| Var | Needed? | Purpose |
+|-----|---------|---------|
+| `ADMIN_USERNAMES` | optional | Comma list of admin usernames (default `josh`) |
+| `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | recommended | Media storage. Without them, member images are stored in `data/uploads` (needs a volume) and video posts are disabled |
+| `GIPHY_API_KEY` | optional | Turns on GIF search (free beta key) |
+| `OPENAI_API_KEY` | optional | Adds AI moderation on top of the free rules |
+
+**Operational checklist**
+1. Attach a Railway volume at `/app/data` so `data/fans.db` (and `data/uploads`) survive deploys.
+2. Member images are served from `/media/...` on this server. Put the API domain behind Cloudflare and enable the free CSAM Scanning Tool (Caching → Configuration) for that zone.
+3. US providers must report apparent child sexual abuse material to NCMEC's CyberTipline (18 U.S.C. 2258A). Register as an electronic service provider with NCMEC before launch.
+4. The old anonymous `/api/comments` endpoints now return 410; comments live on member accounts.

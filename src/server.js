@@ -4,6 +4,8 @@ import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import { resolve } from "node:path";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { PENDING_DIR, PUBLIC_DIR, FILE_RE, verifyPending } from "./media.js";
+import { hit } from "./ratelimit.js";
 import {
   CFG, db,
   authTokenFor, verifyAuth,
@@ -18,9 +20,53 @@ import buildPkpass from "./buildPkpass.js";
 import { pushToAll } from "./apns.js";
 
 const app = express();
+// Railway's edge proxy adds the client IP to X-Forwarded-For. Trust only that hop
+// (set TRUST_PROXY_HOPS=2 if Cloudflare is in front), so req.ip can't be spoofed.
+app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS || 1));
 app.use(express.json());
 app.use("/api/social", socialRoutes);
 app.use("/public", express.static(resolve("public")));
+
+// =========================================================================
+// Member media — served from this server so the API domain can sit behind
+// Cloudflare (enable its free CSAM Scanning Tool on that zone).
+// =========================================================================
+// Short cache so removed images stop being served within the hour
+const MEDIA_HEADERS = {
+  "Cache-Control": "public, max-age=3600",
+  "X-Content-Type-Options": "nosniff",
+  "Content-Security-Policy": "default-src 'none'",
+};
+
+// Approved member images (local storage)
+app.get("/media/local/:file", (req, res) => {
+  if (!FILE_RE.test(req.params.file)) return res.sendStatus(404);
+  res.set(MEDIA_HEADERS);
+  res.sendFile(resolve(PUBLIC_DIR, req.params.file), (err) => { if (err && !res.headersSent) res.sendStatus(404); });
+});
+
+// Pending images: only with a valid, unexpired signature (handed to the uploader and admins)
+app.get("/media/pending/:file", (req, res) => {
+  const { exp, sig } = req.query;
+  if (!verifyPending(req.params.file, exp, sig)) return res.sendStatus(404);
+  res.set({ ...MEDIA_HEADERS, "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex" });
+  res.sendFile(resolve(PENDING_DIR, req.params.file), (err) => { if (err && !res.headersSent) res.sendStatus(404); });
+});
+
+app.get(/^\/media\/(image|video)\/upload\/([\w\-./]+)$/, async (req, res) => {
+  const cloud = process.env.CLOUDINARY_CLOUD_NAME;
+  const [kind, rest] = [req.params[0], req.params[1]];
+  if (!cloud || rest.includes("..")) return res.sendStatus(404);
+  try {
+    const upstream = await fetch(`https://res.cloudinary.com/${cloud}/${kind}/upload/${rest}`, { signal: AbortSignal.timeout(15000) });
+    const type = upstream.headers.get("content-type") || "";
+    if (!upstream.ok || !/^(image|video)\//.test(type)) return res.sendStatus(404);
+    res.set({ ...MEDIA_HEADERS, "Content-Type": type });
+    res.send(Buffer.from(await upstream.arrayBuffer()));
+  } catch {
+    res.sendStatus(502);
+  }
+});
 
 // Cloudinary config
 cloudinary.config({
@@ -48,8 +94,16 @@ function isAdminRequest(req) {
   return !!ADMIN_PASSWORD && safeEqual(req.headers.authorization, ADMIN_PASSWORD);
 }
 
+// Failed admin-password attempts are throttled per IP and globally
+function adminFailAllowed(req) {
+  return hit(`adminfail:${req.ip}`, 10, 15 * 60e3) && hit("adminfail:all", 100, 60 * 60e3);
+}
+
 function requireAdminHeader(req, res, next) {
-  if (!isAdminRequest(req)) return res.status(401).json({ error: "unauthorized" });
+  if (!isAdminRequest(req)) {
+    if (!adminFailAllowed(req)) return res.status(429).json({ error: "Too many attempts. Try again later." });
+    return res.status(401).json({ error: "unauthorized" });
+  }
   next();
 }
 
@@ -168,6 +222,8 @@ app.get("/api/comments/:slug", (req, res) => {
 });
 
 app.post("/api/comments/:slug", (req, res) => {
+  return res.status(410).json({ error: "Comments moved to member accounts on joshsblog.org" });
+  // eslint-disable-next-line no-unreachable
   const { name, body, parentId } = req.body;
   if (!name?.trim() || !body?.trim()) return res.status(400).json({ error: "name and body required" });
   if (body.length > 2000) return res.status(400).json({ error: "comment too long" });
@@ -179,6 +235,8 @@ app.post("/api/comments/:slug", (req, res) => {
 });
 
 app.post("/api/comments/:id/like", (req, res) => {
+  return res.status(410).json({ error: "Comments moved to member accounts on joshsblog.org" });
+  // eslint-disable-next-line no-unreachable
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "invalid id" });
   const updated = incrementLike(id);
@@ -350,6 +408,7 @@ function requireAdmin(req, res, next) {
       res.setHeader("Set-Cookie", `admin_token=${ADMIN_COOKIE}; Path=/admin; HttpOnly; SameSite=Strict; Max-Age=86400${secure}`);
       return next();
     }
+    if (!adminFailAllowed(req)) return res.status(429).send(renderAdminLogin("Too many attempts. Try again later."));
     return res.status(401).send(renderAdminLogin("Wrong password"));
   }
   if (req.path.startsWith("/api/")) return res.status(401).json({ error: "unauthorized" });
@@ -806,11 +865,12 @@ function renderAdminPage({ fans, devices, content, recentFans, posts, allComment
     <script>
       const p = new URLSearchParams(location.search);
       const el = document.getElementById("msg");
-      if (p.get("sent")) el.innerHTML = '<div class="success">Broadcast sent! Updated ' + p.get("updated") + ' cards, pushed to ' + p.get("pushed") + ' devices.</div>';
-      if (p.get("posted")) el.innerHTML = '<div class="success">Post published to your fan feed.</div>';
-      if (p.get("deleted")) el.innerHTML = '<div class="success">Post deleted.</div>';
-      if (p.get("comment_deleted")) el.innerHTML = '<div class="success">Comment deleted.</div>';
-      if (p.get("error")) el.innerHTML = '<div class="error">Error: ' + p.get("error") + '</div>';
+      function flash(cls, text) { const d = document.createElement("div"); d.className = cls; d.textContent = text; el.replaceChildren(d); }
+      if (p.get("sent")) flash("success", "Broadcast sent! Updated " + Number(p.get("updated")) + " cards, pushed to " + Number(p.get("pushed")) + " devices.");
+      if (p.get("posted")) flash("success", "Post published to your fan feed.");
+      if (p.get("deleted")) flash("success", "Post deleted.");
+      if (p.get("comment_deleted")) flash("success", "Comment deleted.");
+      if (p.get("error")) flash("error", "Error: " + p.get("error"));
     </script>
 
     <div class="card">
