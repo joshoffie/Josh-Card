@@ -21,6 +21,17 @@ Fan taps "Fans Only" link on back of card:
   → token-gated page with exclusive content
 ```
 
+## Look and feel
+
+The site is styled like a personal blog from about 2003: Blogger-style entries with date headers,
+LiveJournal "current mood / current music" lines, an AIM-style buddy list and IM windows,
+Windows 2000 pop-ups, 88x31 buttons, blinkies, a hit counter and pixel icons that animate on hover.
+
+- All pixel art is original and drawn in code: `python3 tools/make_retro_art.py` regenerates `docs/img/`.
+- Fonts in `docs/fonts/`: Silkscreen (Jason Kottke) and Anton, both SIL Open Font License.
+- The hit counter (`/api/social/hits`) counts each visitor once a day using a salted IP hash kept in memory.
+- Josh's composer has optional Subject, Current mood and Current music fields.
+
 ## Setup
 
 ### 1. Apple Developer Portal

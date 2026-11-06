@@ -10,11 +10,12 @@ import { v2 as cloudinary } from "cloudinary";
 import { randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createPost, removePost, CATEGORIES } from "./store.js";
+import { createPost, removePost, CATEGORIES, MOODS } from "./store.js";
 import * as S from "./social.js";
 import * as C from "./community.js";
 import * as Chat from "./chat.js";
 import * as YouTube from "./youtube.js";
+import * as Hits from "./hits.js";
 import * as Safety from "./safety.js";
 import { checkText, checkImage, sniffImage, validGifUrl, aiModerationEnabled } from "./moderation.js";
 import { limit, clientIp, hit } from "./ratelimit.js";
@@ -164,13 +165,21 @@ function me(userId) {
 }
 
 router.get("/config", (req, res) => {
+  const josh = S.adminUser();
   res.json({
     categories: CATEGORIES,
+    moods: MOODS,
+    // Public "About Me" box in the sidebar
+    about: josh ? { username: josh.username, display_name: josh.display_name, bio: josh.bio, avatar_url: josh.avatar_url, created_at: josh.created_at } : null,
     gif_search: !!process.env.GIPHY_API_KEY,
     report_reasons: Safety.REPORT_REASONS,
     points: C.POINTS,
   });
 });
+
+// Old-school hit counter: counts each visitor once a day
+router.post("/hits", (req, res) => res.json({ count: Hits.countVisit(req.ip) }));
+router.get("/hits", (req, res) => res.json({ count: Hits.total() }));
 
 // Every upload on Josh's YouTube channel, for the YouTube tab
 router.get("/youtube", wrap(async (req, res) => {
@@ -269,7 +278,7 @@ router.post("/posts", requireAdmin, adminUpload.array("media", 10), wrap(async (
   }
   const type = !urls.length ? "text" : hasVideo && urls.length === 1 ? "video" : "image";
   const mediaUrl = urls.length === 1 ? urls[0] : urls.length ? JSON.stringify(urls) : "";
-  const post = createPost(type, title, body, mediaUrl, category);
+  const post = createPost(type, title, body, mediaUrl, category, { mood: String(req.body.mood || ""), music: req.body.music });
   res.status(201).json(C.getPost(post.id, req.user.id));
 }));
 

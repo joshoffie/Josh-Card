@@ -125,6 +125,7 @@ export function award(userId, reason, ref) {
 // ---------------------------------------------------------------------------
 const POST_SELECT = `
   SELECT p.id, p.post_type, p.title, p.body, p.media_url, COALESCE(p.category, '') AS category, p.created_at,
+    COALESCE(p.mood, '') AS mood, COALESCE(p.music, '') AS music,
     (SELECT COUNT(*) FROM post_likes l WHERE l.post_id = p.id) AS like_count,
     (SELECT COUNT(*) FROM post_comments c WHERE c.post_id = p.id AND c.status = 'visible') AS comment_count,
     EXISTS(SELECT 1 FROM post_likes l WHERE l.post_id = p.id AND l.user_id = @viewer) AS liked

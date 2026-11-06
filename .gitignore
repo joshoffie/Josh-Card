@@ -7,3 +7,4 @@ node_modules/
 certs/
 data/
 !certs/.gitkeep
+__pycache__/

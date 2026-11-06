@@ -113,6 +113,9 @@ try { db.exec("ALTER TABLE comments ADD COLUMN parent_id INTEGER DEFAULT NULL");
 try { db.exec("ALTER TABLE comments ADD COLUMN likes INTEGER DEFAULT 0"); } catch(e) {}
 try { db.exec("ALTER TABLE posts ADD COLUMN category TEXT DEFAULT ''"); } catch(e) {}
 try { db.exec("ALTER TABLE posts ADD COLUMN hidden INTEGER DEFAULT 0"); } catch(e) {}
+// LiveJournal-style "current mood" / "current music" lines on Josh's posts
+try { db.exec("ALTER TABLE posts ADD COLUMN mood TEXT DEFAULT ''"); } catch(e) {}
+try { db.exec("ALTER TABLE posts ADD COLUMN music TEXT DEFAULT ''"); } catch(e) {}
 
 // ---------------------------------------------------------------------------
 // Auth token — deterministic HMAC of the serial, no storage needed
@@ -230,9 +233,15 @@ const getPost = db.prepare("SELECT * FROM posts WHERE id = ?");
 
 export const CATEGORIES = ["software", "art", "music"];
 
-export function createPost(postType, title, body, mediaUrl, category = "") {
+export const MOODS = ["happy", "excited", "chill", "creative", "sleepy", "hungry", "sad", "annoyed", "loved",
+  "cool", "accomplished", "nostalgic", "silly", "thoughtful", "busy"];
+
+export function createPost(postType, title, body, mediaUrl, category = "", { mood = "", music = "" } = {}) {
   if (category && !CATEGORIES.includes(category)) throw new Error("Invalid category");
+  if (mood && !MOODS.includes(mood)) throw new Error("Invalid mood");
+  music = String(music || "").trim().slice(0, 120);
   const info = insertPost.run(postType, title, body, mediaUrl || "", category || "");
+  if (mood || music) db.prepare("UPDATE posts SET mood = ?, music = ? WHERE id = ?").run(mood || "", music, info.lastInsertRowid);
   return getPost.get(info.lastInsertRowid);
 }
 
