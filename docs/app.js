@@ -678,9 +678,10 @@ function renderFeed() {
     ? `<div class="entry"><div class="empty">${cat ? `Nothing in ${CATS[cat]} yet. Check back soon!` : "No entries yet."}</div></div>` : "";
   const more = !state.postsDone && state.posts.length ? `<div class="center"><button class="btn load-more" onclick="loadMore()">« Older Entries</button></div>` : "";
   // The first pinned post is the featured one. On Music that's the A-side (main project),
-  // and the rest are B-sides.
+  // and the rest are B-sides. Spotify's track list scrolls inside the player, so every
+  // top track is reachable at these heights.
   const pinLook = (i) => cat === "music"
-    ? (i === 0 ? { cls: "pin-a", label: "★ A-side · main project", tall: 700 } : { cls: "pin-b", label: "B-side · side project", tall: 500 })
+    ? (i === 0 ? { cls: "pin-a", label: "★ A-side · main project", tall: 400 } : { cls: "pin-b", label: "B-side · side project", tall: 380 })
     : (i === 0 && state.pinned.length > 1 ? { cls: "pin-a", label: "★ Featured", tall: 480 } : { cls: "", label: "", tall: 0 });
   const pinned = cat && state.pinned.length ? `<div class="pinned"><div class="pinned-t">${pix("pin")} Pinned</div>
     <div class="pinned-grid">${state.pinned.map((p, i) => renderPost(p, false, pinLook(i))).join("")}</div></div>` : "";
