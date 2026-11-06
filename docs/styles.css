@@ -132,6 +132,8 @@ textarea.input { resize: vertical; min-height: 70px; }
 .caption { padding: 0 1rem; font-size: 0.93rem; white-space: pre-wrap; word-wrap: break-word; }
 .caption b { color: var(--white); margin-right: 0.35rem; }
 .clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.download-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 1rem 0.2rem; }
+.download-row .muted { font-size: 0.85rem; }
 .post-actions { display: flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.6rem; }
 .post-actions .spacer { flex: 1; }
 .like-btn.liked { color: var(--like); }

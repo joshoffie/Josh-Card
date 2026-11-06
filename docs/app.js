@@ -37,7 +37,7 @@ function src(u) {
   return /^https?:\/\//i.test(u) ? u : "";
 }
 function linkify(text) {
-  return esc(text).replace(/(https?:\/\/[^\s<]+)/g, (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer">${m}</a>`);
+  return esc(text).replace(/(https?:\/\/[^\s<]+)/g, (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${m}</a>`);
 }
 function parseDate(d) {
   if (!d) return 0;
@@ -371,7 +371,9 @@ function embedHtml(url) {
   let m;
   if (/^https:\/\/open\.spotify\.com\//.test(url)) {
     const e = url.replace("open.spotify.com/", "open.spotify.com/embed/").split("?")[0];
-    return `<div class="embed"><iframe src="${esc(e)}" height="152" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe></div>`;
+    // Artists, playlists and albums get the tall player with the track list
+    const h = /open\.spotify\.com\/(?:intl-[\w-]+\/)?(?:artist|playlist|album|show)\//.test(url) ? 352 : 152;
+    return `<div class="embed"><iframe src="${esc(e)}" height="${h}" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe></div>`;
   }
   if ((m = url.match(/^https:\/\/(?:www\.|m\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([\w-]{6,})/))) {
     return `<div class="embed"><div class="video-embed"><iframe src="https://www.youtube.com/embed/${esc(m[1])}" allowfullscreen loading="lazy"></iframe></div></div>`;
@@ -386,6 +388,17 @@ function firstEmbed(p) {
   const links = String(p.body || "").match(/https?:\/\/[^\s]+/g) || [];
   for (const l of links) if (embedHtml(l)) return embedHtml(l);
   return "";
+}
+
+// Software posts get a Download button for the first non-embed link in the post
+function downloadButton(p) {
+  if (p.category !== "software") return "";
+  const links = String(p.body || "").match(/https?:\/\/[^\s<]+/g) || [];
+  const url = links.find((l) => !embedHtml(l));
+  if (!url) return "";
+  let host;
+  try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
+  return `<div class="download-row"><a class="btn btn-primary" href="${esc(url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Download</a><span class="muted">${esc(host)}</span></div>`;
 }
 
 function renderComposer() {
@@ -472,20 +485,20 @@ function renderPost(p, full = false) {
       ? `<video src="${esc(src(u))}" controls playsinline preload="metadata"></video>`
       : `<img src="${esc(src(u))}" alt="" loading="lazy">`}</div>`).join("");
     const multi = media.length > 1;
-    const caption = (p.title || p.body) ? `<div class="caption ${full ? "" : "clamp"}"${link}><b>Josh Hoffman</b>${p.title ? `<b>${esc(p.title)}</b> ` : ""}${full ? linkify(p.body) : esc(p.body)}</div>` : "";
+    const caption = (p.title || p.body) ? `<div class="caption ${full ? "" : "clamp"}"${link}><b>Josh Hoffman</b>${p.title ? `<b>${esc(p.title)}</b> ` : ""}${linkify(p.body)}</div>` : "";
     return `<article class="post media-post">${postHeader(p)}
       <div class="carousel-wrap ${multi ? "multi" : ""}">
         <div class="carousel" onscroll="carouselScroll(this)">${slides}</div>
         ${multi ? `<div class="slide-count">1/${media.length}</div>` : ""}
       </div>
       ${multi ? `<div class="dots">${media.map((_, i) => `<span class="${i ? "" : "on"}"></span>`).join("")}</div>` : ""}
-      ${postActions(p)}${caption}${embed}
+      ${postActions(p)}${caption}${downloadButton(p)}${embed}
       ${!full && p.comment_count ? `<a class="view-comments" href="#/post/${p.id}">View ${p.comment_count === 1 ? "1 comment" : `all ${p.comment_count} comments`}</a>` : `<div class="post-foot-pad"></div>`}
     </article>`;
   }
   return `<article class="post text-post">${postHeader(p)}
-    <div class="post-text"${link}>${title}${full ? linkify(p.body) : esc(p.body)}</div>
-    ${embed}${postActions(p)}</article>`;
+    <div class="post-text"${link}>${title}${linkify(p.body)}</div>
+    ${downloadButton(p)}${embed}${postActions(p)}</article>`;
 }
 
 function carouselScroll(el) {

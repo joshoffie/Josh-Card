@@ -237,15 +237,15 @@ router.post("/posts", requireAdmin, adminUpload.array("media", 10), wrap(async (
   const category = String(req.body.category || "");
   if (category && !CATEGORIES.includes(category)) throw new Error("Invalid category");
   const files = req.files || [];
-  // Images already hosted in the repo (served by GitHub Pages) can be posted by URL
+  // Images already hosted in the repo (docs/art, docs/software, docs/music on GitHub Pages) can be posted by URL
   let linked = [];
   if (req.body.media_urls) {
     try { linked = JSON.parse(req.body.media_urls); } catch { linked = String(req.body.media_urls).split(/\s+/); }
     linked = [].concat(linked).map((u) => String(u).trim()).filter(Boolean);
     if (linked.length + files.length > 10) throw new Error("Up to 10 photos or videos per post");
     for (const u of linked) {
-      if (!/^https:\/\/(?:www\.)?joshsblog\.org\/art\/[\w\-./]+\.(?:jpe?g|png|webp|gif)$/i.test(u) || u.includes("..")) {
-        throw new Error("Linked media must be an image under https://joshsblog.org/art/");
+      if (!/^https:\/\/(?:www\.)?joshsblog\.org\/(?:art|software|music)\/[\w\-./]+\.(?:jpe?g|png|webp|gif)$/i.test(u) || u.includes("..")) {
+        throw new Error("Linked media must be an image under joshsblog.org/art/, /software/ or /music/");
       }
     }
   }
