@@ -3,6 +3,7 @@ import express from "express";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { PENDING_DIR, PUBLIC_DIR, FILE_RE, verifyPending } from "./media.js";
 import { hit } from "./ratelimit.js";
@@ -264,60 +265,138 @@ app.get("/health", (_req, res) => {
 // =========================================================================
 
 // --- Fan signup page (QR code destination) --------------------------------
+// Styled like Josh's Blog (joshsblog.org). Shows what the card looks like and where it lives
+// before asking for a name. The card art is inlined from pass-template/.
+const BLOG = "https://joshsblog.org";
+const cardArt = (file) => {
+  try { return "data:image/png;base64," + readFileSync(resolve("pass-template", file)).toString("base64"); }
+  catch { return ""; }
+};
+const CARD_LOGO = cardArt("logo@2x.png");
+const CARD_THUMB = cardArt("thumbnail_2x.png");
+
 app.get("/join", (req, res) => {
-  const artistName = CFG.artistName;
+  const content = getCurrentContent() || {};
+  const year = new Date().getFullYear();
+  const latest = content.latest_drop || "Stay tuned...";
+  res.set("Cache-Control", "no-cache");
   res.send(`<!DOCTYPE html>
 <html lang="en"><head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escHtml(artistName)} — Get Your Card</title>
+  <title>Josh Card · Josh's Blog</title>
+  <meta name="description" content="A free fan card for your iPhone's Wallet app. Get a heads-up on your lock screen when Josh has a new song or show.">
+  <meta name="theme-color" content="#000033">
+  <link rel="icon" href="${BLOG}/img/favicon.png">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #0a0a0a; color: #e0e0e0; min-height: 100vh;
-      display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
-    .container { width: 100%; max-width: 380px; }
-    .header { text-align: center; margin-bottom: 2rem; }
-    .header h1 { font-size: 1.5rem; color: #fff; margin-bottom: 0.3rem; }
-    .header p { font-size: 0.85rem; color: #666; }
-    .form-card { background: #161616; border: 1px solid #2a2a2a; border-radius: 14px;
-      padding: 1.5rem; }
-    label { display: block; font-size: 0.75rem; color: #888; text-transform: uppercase;
-      letter-spacing: 0.08em; margin-bottom: 0.3rem; }
-    input { width: 100%; padding: 0.75rem; border-radius: 8px; border: 1px solid #333;
-      background: #222; color: #fff; font-size: 1rem; margin-bottom: 1rem;
-      font-family: inherit; -webkit-appearance: none; }
-    input::placeholder { color: #555; }
-    input:focus { outline: none; border-color: #555; }
-    .btn { width: 100%; padding: 0.9rem; border-radius: 10px; border: none;
-      background: #fff; color: #000; font-weight: 600; font-size: 1.05rem;
-      cursor: pointer; transition: opacity 0.2s; -webkit-appearance: none; }
-    .btn:hover { opacity: 0.85; }
-    .btn:active { opacity: 0.7; }
-    .note { text-align: center; font-size: 0.75rem; color: #444; margin-top: 1.5rem;
-      line-height: 1.5; }
-    .wallet-icon { display: inline-block; width: 20px; height: 20px;
-      vertical-align: middle; margin-right: 0.3rem; }
+    @font-face { font-family: "Impact Web"; src: local("Impact"), url(${BLOG}/fonts/anton-400.woff2) format("woff2"); font-display: swap; }
+    @font-face { font-family: "Silkscreen"; src: url(${BLOG}/fonts/silkscreen-400.woff2) format("woff2"); font-display: swap; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-text-size-adjust: 100%; }
+    body { background: #000000 url(${BLOG}/img/bg-stars.gif); color: #cccccc; font: 13px/1.5 Verdana, Geneva, Tahoma, sans-serif; min-height: 100vh; }
+    a { color: #66ccff; text-decoration: none; } a:hover { color: #ffffff; text-decoration: underline; }
+    .page { max-width: 560px; margin: 0 auto; padding: 14px 12px 30px; }
+    .banner { position: relative; height: 96px; background: #000033 url(${BLOG}/img/header.png) center bottom / cover; border: 1px solid #336699; border-bottom: 3px solid #3399ff; image-rendering: pixelated; }
+    .banner a { position: absolute; left: 14px; bottom: 10px; color: #fff; text-decoration: none; font: 40px/1 "Impact Web", Impact, sans-serif; text-transform: uppercase; letter-spacing: 1px; text-shadow: 3px 3px 0 #0066cc, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
+    .banner small { position: absolute; right: 10px; top: 8px; font: 10px "Silkscreen", monospace; color: #99ccff; letter-spacing: 1px; }
+    .box { margin-top: 14px; background: #000000; border: 1px solid #333366; }
+    .box-t { padding: 4px 8px; background: linear-gradient(90deg, #003399, #3366cc); color: #fff; font: bold 12px Tahoma, Verdana, sans-serif; letter-spacing: .5px; display: flex; align-items: center; gap: 6px; }
+    .ico { display: inline-block; flex: none; width: 16px; height: 16px; background: 0 0 no-repeat; image-rendering: pixelated; }
+    .ico-card { background-image: url(${BLOG}/img/i-card.png); } .ico-profile { background-image: url(${BLOG}/img/i-profile.png); }
+    .btn:hover .ico, .box-t:hover .ico { animation: frames .5s steps(4) infinite; }
+    @keyframes frames { to { background-position: -64px 0; } }
+    .box-b { padding: 14px; }
+    h1 { font: 30px/1.05 "Impact Web", Impact, sans-serif; text-transform: uppercase; color: #fff; letter-spacing: 1px; margin-bottom: 6px; }
+    .lead { color: #99ccff; font-size: 14px; margin-bottom: 14px; }
+    /* The card, drawn the way it looks in Apple Wallet */
+    .jc { position: relative; width: 100%; max-width: 330px; margin: 4px auto 6px; padding: 14px 16px 16px; background: #fbf2ea; color: #000; border-radius: 12px; box-shadow: 0 0 0 1px #996633, 6px 6px 0 #003366; font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; }
+    .jc-top { display: flex; justify-content: space-between; align-items: flex-start; }
+    .jc-logo { height: 15px; margin-top: 4px; }
+    .jc-l { font-size: 9px; letter-spacing: .5px; color: #505050; text-transform: uppercase; }
+    .jc-v { font-size: 15px; }
+    .jc-mid { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 12px; min-height: 84px; }
+    .jc-name { font-size: 26px; font-weight: 300; line-height: 1.15; word-break: break-word; padding-right: 8px; }
+    .jc-thumb { width: 84px; height: 84px; flex: none; }
+    .jc-sec { margin-top: 2px; }
+    .jc-qr { display: block; width: 110px; height: 110px; margin: 14px auto 0; padding: 6px; background: #fff; border-radius: 6px; }
+    .jc-cap { text-align: center; font-size: 9px; color: #505050; margin-top: 4px; }
+    .where { margin: 12px 0 0; text-align: center; font: 10px "Silkscreen", monospace; letter-spacing: 1px; color: #ffcc00; }
+    ul.stars { list-style: none; margin-top: 14px; }
+    ul.stars li { position: relative; padding-left: 18px; margin-bottom: 9px; }
+    ul.stars li::before { content: ""; position: absolute; left: 0; top: 0.45em; width: 9px; height: 9px; background: url(${BLOG}/img/star.png) 0 0 no-repeat; image-rendering: pixelated; }
+    ul.stars b { color: #fff; }
+    label { display: block; font: bold 11px Tahoma, Verdana, sans-serif; color: #99ccff; margin-bottom: 4px; }
+    input { display: block; width: 100%; padding: 7px 8px; border: 0; background: #fff; color: #000; font: 16px Verdana, sans-serif; outline: none;
+      box-shadow: inset -1px -1px #fff, inset 1px 1px #999999, inset -2px -2px #ffffff, inset 2px 2px #000000; }
+    .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 12px; padding: 10px; border: 0; outline: 1px solid #000;
+      background: #cccccc; color: #000; font: bold 15px Tahoma, Verdana, sans-serif; cursor: pointer; -webkit-appearance: none;
+      box-shadow: inset -1px -1px #000000, inset 1px 1px #fff, inset -2px -2px #999999, inset 2px 2px #ffffff; }
+    .btn:hover { background: #ccccff; }
+    .btn:active { box-shadow: inset 1px 1px #000000, inset -1px -1px #fff, inset 2px 2px #999999, inset -2px -2px #ffffff; }
+    .note { margin-top: 10px; font-size: 11px; color: #999999; }
+    .warn { display: none; margin-top: 12px; padding: 8px 10px; border: 1px dashed #ffcc00; color: #ffcc00; font-size: 12px; }
+    .foot { margin-top: 18px; text-align: center; font-size: 11px; color: #999999; }
   </style>
 </head><body>
-  <div class="container">
-    <div class="header">
-      <p>Add this for Notifications for new songs, and shows.</p>
+  <div class="page">
+    <div class="banner"><small>JOSH'S BLOG PRESENTS</small><a href="${BLOG}">Josh Card</a></div>
+
+    <div class="box">
+      <div class="box-t"><span class="ico ico-card"></span>What's a Josh Card?</div>
+      <div class="box-b">
+        <h1>A free fan card for your iPhone</h1>
+        <p class="lead">It lives in the <b>Wallet</b> app, right next to your tickets and boarding passes.</p>
+        <div class="jc" aria-label="What the Josh Card looks like in Wallet">
+          <div class="jc-top">
+            ${CARD_LOGO ? `<img class="jc-logo" src="${CARD_LOGO}" alt="JOSH CARD">` : `<b>JOSH CARD</b>`}
+            <div style="text-align:right"><div class="jc-l">Member</div><div class="jc-v">${year}</div></div>
+          </div>
+          <div class="jc-mid">
+            <div class="jc-name" id="jc-name">Your Name</div>
+            ${CARD_THUMB ? `<img class="jc-thumb" src="${CARD_THUMB}" alt="">` : ""}
+          </div>
+          <div class="jc-sec"><div class="jc-l">New single</div><div class="jc-v">${escHtml(latest)}</div></div>
+          <svg class="jc-qr" viewBox="0 0 21 21" shape-rendering="crispEdges" aria-hidden="true">
+            <path d="M0 0h7v7H0zM14 0h7v7h-7zM0 14h7v7H0z" fill="#000"/><path d="M1 1h5v5H1zM15 1h5v5h-5zM1 15h5v5H1z" fill="#fff"/>
+            <path d="M2 2h3v3H2zM16 2h3v3h-3zM2 16h3v3H2z" fill="#000"/>
+            <path d="M8 1h1v2H8zM10 0h2v1h-2zM9 4h2v2H9zM12 3h1v3h-1zM8 8h3v1H8zM13 8h2v2h-2zM16 9h3v1h-3zM1 9h2v2H1zM4 8h2v1H4zM9 10h1v3H9zM11 11h3v1h-3zM15 12h2v2h-2zM18 11h2v3h-2zM8 14h2v2H8zM11 14h1v4h-1zM13 15h3v1h-3zM17 16h2v2h-2zM14 18h2v3h-2zM9 18h2v2H9zM19 19h2v2h-2zM5 10h1v2H5z" fill="#000"/>
+          </svg>
+          <div class="jc-cap">your personal code</div>
+        </div>
+        <div class="where">▲ this is what you get ▲</div>
+        <ul class="stars">
+          <li><b>New songs and shows on your lock screen.</b> When Josh has something new, the card updates itself and gives you a heads-up.</li>
+          <li><b>Flip it over</b> (tap ⋯ on the card in Wallet) for a fans-only page and a link to listen.</li>
+          <li><b>Just your first name.</b> No email, no app, no account. Free. Remove it from Wallet any time.</li>
+        </ul>
+      </div>
     </div>
-    <div class="form-card">
-      <form id="joinForm">
-        <label>First Name</label>
-        <input type="text" name="name" placeholder="Your name" required autofocus autocomplete="given-name">
-        <button type="submit" class="btn">Add to Apple Wallet</button>
-      </form>
+
+    <div class="box">
+      <div class="box-t"><span class="ico ico-profile"></span>Get yours</div>
+      <div class="box-b">
+        <form id="joinForm">
+          <label for="name">First name (it goes on the card)</label>
+          <input type="text" id="name" name="name" placeholder="Your name" maxlength="40" required autocomplete="given-name">
+          <button type="submit" class="btn"><span class="ico ico-card"></span>Add to Apple Wallet</button>
+        </form>
+        <p class="note">Tap the button, then tap <b>Add</b> on the screen that pops up. That's it.</p>
+        <div class="warn" id="warn">Looks like you're not on an iPhone. The Josh Card is an Apple Wallet card, so open this page on your iPhone to add it.</div>
+      </div>
     </div>
-    <p class="note">Card goes straight to your iPhone wallet with fun updates and stuff.</p>
+
+    <p class="foot"><a href="${BLOG}">« back to Josh's Blog</a></p>
   </div>
   <script>
-    document.getElementById("joinForm").addEventListener("submit", function(e) {
+    var nameEl = document.getElementById("name"), cardName = document.getElementById("jc-name");
+    nameEl.addEventListener("input", function () { cardName.textContent = nameEl.value.trim() || "Your Name"; });
+    if (!/iPhone|iPad|iPod/.test(navigator.userAgent) && !(navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) {
+      document.getElementById("warn").style.display = "block";
+    }
+    document.getElementById("joinForm").addEventListener("submit", function (e) {
       e.preventDefault();
-      const name = encodeURIComponent(this.name.value.trim());
+      var name = nameEl.value.trim();
       if (!name) return;
-      window.location.href = "/issue?name=" + name + "&source=qr";
+      window.location.href = "/issue?name=" + encodeURIComponent(name) + "&source=qr";
     });
   </script>
 </body></html>`);
