@@ -118,6 +118,8 @@ try { db.exec("ALTER TABLE posts ADD COLUMN mood TEXT DEFAULT ''"); } catch(e) {
 try { db.exec("ALTER TABLE posts ADD COLUMN music TEXT DEFAULT ''"); } catch(e) {}
 // Titles of uploaded music tracks, as a JSON array in the same order as the audio files in media_url
 try { db.exec("ALTER TABLE posts ADD COLUMN tracks TEXT DEFAULT ''"); } catch(e) {}
+// Pinned ("sticky") posts stay at the top of their tab
+try { db.exec("ALTER TABLE posts ADD COLUMN pinned_at TEXT"); } catch(e) {}
 
 // ---------------------------------------------------------------------------
 // Auth token — deterministic HMAC of the serial, no storage needed
@@ -233,7 +235,7 @@ const listPosts = db.prepare(
 const deletePost = db.prepare("UPDATE posts SET hidden = 1 WHERE id = ?");
 const getPost = db.prepare("SELECT * FROM posts WHERE id = ?");
 
-export const CATEGORIES = ["software", "art", "music"];
+export const CATEGORIES = ["software", "art", "music", "old"];
 
 export const MOODS = ["happy", "excited", "chill", "creative", "sleepy", "hungry", "sad", "annoyed", "loved",
   "cool", "accomplished", "nostalgic", "silly", "thoughtful", "busy"];

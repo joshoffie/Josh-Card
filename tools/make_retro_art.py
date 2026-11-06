@@ -425,11 +425,59 @@ def icon_key():
     return frames
 
 
+def icon_cassette():
+    """Old Stuff: a cassette tape whose reels turn on hover."""
+    frames = []
+    ring = [(-1, -1), (0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0)]
+    for f in range(4):
+        im = canvas()
+        art(im, 0, 2, [
+            "kkkkkkkkkkkkkkkk",
+            "kDDDDDDDDDDDDDDk",
+            "kDttttttttttttDk",
+            "kDtrrrrrrrrrrtDk",
+            "kDtkkkkkkkkkktDk",
+            "kDtkkkkkkkkkktDk",
+            "kDtkkkkkkkkkktDk",
+            "kDttttttttttttDk",
+            "kDDDGGGGGGGGDDDk",
+            "kDDGkGGGGGGkGDDk",
+            "kkkkkkkkkkkkkkkk",
+        ])
+        for cx in (5, 10):
+            for i, (dx, dy) in enumerate(ring):
+                px(im, cx + dx, 7 + dy, "G" if (i + f * 2) % 4 == 0 else "w")
+            px(im, cx, 7, "k")
+        frames.append(im)
+    return frames
+
+
+def icon_pin():
+    """Pushpin that wiggles on hover."""
+    frames = []
+    for dx in (0, 1, 0, -1):
+        im = canvas()
+        art(im, 3 + dx, 1, [
+            "...kkkk...",
+            "..krrrrk..",
+            "..krwrrk..",
+            "..krrrrk..",
+            "...krrk...",
+            "..kRRRRk..",
+            ".kRRRRRRk.",
+            "..kkkkkk..",
+        ])
+        for y in range(9, 15):
+            px(im, 7 + (dx if y < 12 else 0), y, "G")
+        frames.append(im)
+    return frames
+
+
 ICONS = {
     "feed": icon_home, "software": icon_computer, "art": icon_palette, "music": icon_notes,
     "youtube": icon_tv, "chats": icon_mail, "friends": icon_people, "profile": icon_smiley_wink,
     "settings": icon_gear, "mod": icon_shield, "rules": icon_book, "card": icon_card,
-    "logout": icon_door, "login": icon_key,
+    "logout": icon_door, "login": icon_key, "old": icon_cassette, "pin": icon_pin,
 }
 
 

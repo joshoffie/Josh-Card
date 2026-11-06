@@ -4,9 +4,11 @@
 // LiveJournal moods, an AIM-style messenger, XP pop-up windows and GIFs.
 // =========================================================================
 const API = window.JOSH_API || "https://josh-card-production.up.railway.app";
-const CATS = { software: "Software", art: "Art", music: "Music" };
-// Josh's YouTube channel, listed on the YouTube tab
+const CATS = { software: "Software", art: "Art", music: "Music", old: "Old Stuff" };
+// Josh's YouTube channels: the current one (YouTube tab) and his old one (Old Stuff tab)
 const YOUTUBE = { channelId: "UCGHriOkfa6n_a0LawFbTrQA", name: "Josh Hoffman", handle: "@JoshHoffmanMusic" };
+const OLD_YOUTUBE = { channelId: "UC58D_1R64itBfH4wjP8E8jQ", name: "Calvin Kingston", handle: "@calvinkingston_" };
+const OLD_SPOTIFY = "https://open.spotify.com/artist/6nN86x5WiStduylr1z2735";
 const PAGE = 20;
 const MOOD_FALLBACK = ["happy", "excited", "chill", "creative", "sleepy", "hungry", "sad", "annoyed", "loved",
   "cool", "accomplished", "nostalgic", "silly", "thoughtful", "busy"];
@@ -16,7 +18,7 @@ const state = {
   me: null,
   config: { categories: Object.keys(CATS), gif_search: false, report_reasons: {}, points: {}, moods: MOOD_FALLBACK, about: null },
   route: { name: "feed", params: [] },
-  posts: [], postsKey: "", postsDone: false, loadingPosts: false,
+  posts: [], postsKey: "", postsDone: false, loadingPosts: false, pinned: [],
   post: null, comments: [],
   profile: null,
   friends: [], requests: { received: [], sent: [] },
@@ -227,7 +229,7 @@ async function go() {
   }
   try {
     if (name === "music" && params[0] === "youtube") { location.replace("#/youtube"); return; } // old link
-    if (["feed", ...Object.keys(CATS)].includes(name)) await loadPosts(true);
+    if (["feed", ...Object.keys(CATS)].includes(name)) await Promise.all([loadPosts(true), loadPinned()]);
     if (name === "post") await loadPost(params[0]);
     if (name === "u") { state.profile = null; render(); state.profile = await api("/users/" + encodeURIComponent(params[0])); }
     if (name === "friends") await loadFriends();
@@ -235,6 +237,7 @@ async function go() {
     if (name === "chat") { state.chat = null; render(); await loadChat(params[0]); startChatPoll(); }
     if (name === "mod") state.mod = await api("/mod/queue");
     if (name === "youtube") { state.youtube = null; render(); state.youtube = await api("/youtube").catch(() => ({ error: true })); }
+    if (name === "old") state.oldYoutube = await api("/youtube?channel=old").catch(() => ({ error: true }));
   } catch (e) {
     if (e.status === 404) { render(`<div class="entry"><div class="empty">404 — that page doesn't exist anymore. <a href="#/feed">Go home</a></div></div>`); return; }
     toast(e.message);
@@ -264,6 +267,10 @@ async function loadPosts(reset) {
   } finally { state.loadingPosts = false; }
 }
 async function loadMore() { await loadPosts(false); render(); }
+async function loadPinned() {
+  const cat = currentCategory();
+  state.pinned = cat ? await api("/posts/pinned?category=" + cat).catch(() => []) : [];
+}
 
 async function loadPost(id) {
   const data = await api("/posts/" + encodeURIComponent(id));
@@ -308,6 +315,7 @@ function navItems() {
     { key: "art", label: "Art", href: "#/art" },
     { key: "music", label: "Music", href: "#/music" },
     { key: "youtube", label: "YouTube", href: "#/youtube" },
+    { key: "old", label: "Old Stuff", href: "#/old" },
     { key: "chats", label: "Chats", href: "#/chats", badge: "unread_chats" },
   ];
 }
@@ -343,7 +351,6 @@ function renderLinkBar() {
 function renderBanner() {
   return `<header class="banner">
     <a class="banner-title" href="#/feed">Josh's Blog</a>
-    <div class="banner-tag">software ~ art ~ music ~ &amp; the people who follow along</div>
     <img class="tw tw1" src="img/sparkle-big.gif" alt=""><img class="tw tw2" src="img/sparkle.gif" alt=""><img class="tw tw3" src="img/sparkle.gif" alt="">
   </header>`;
 }
@@ -601,25 +608,42 @@ async function submitPost() {
   } finally { btn.disabled = false; btn.textContent = "Post Entry"; }
 }
 
-function renderYouTube() {
-  const yt = state.youtube;
-  const channel = `https://www.youtube.com/channel/${yt?.channel_id || YOUTUBE.channelId}`;
-  const head = `<h2 class="page-h">${pix("youtube")} YouTube</h2>
-    <div class="entry yt-head"><div class="row">${joshPic("md")}<div style="flex:1"><b class="yt-name">${esc(YOUTUBE.name)}</b><br><span class="muted">${esc(YOUTUBE.handle)} on YouTube</span></div>
+function renderVideoList(yt, ch) {
+  const channel = `https://www.youtube.com/channel/${yt?.channel_id || ch.channelId}`;
+  const head = `<div class="entry yt-head"><div class="row">${ch === YOUTUBE ? joshPic("md") : `<span class="av md josh-pic">${pix("youtube")}</span>`}
+    <div style="flex:1"><b class="yt-name">${esc(ch.name)}</b><br><span class="muted">${esc(ch.handle)} on YouTube${yt?.videos?.length ? ` · ${yt.videos.length} video${yt.videos.length === 1 ? "" : "s"}` : ""}</span></div>
     <a class="btn btn-primary" href="${channel}" target="_blank" rel="noopener noreferrer">Open channel</a></div></div>`;
   if (!yt) return head + loading("Loading videos");
   if (yt.error || !yt.videos?.length) {
     // Couldn't list the videos: fall back to YouTube's own uploads player
-    const uploads = "UU" + (yt.channel_id || YOUTUBE.channelId).slice(2);
-    return `${head}<div class="entry"><div class="embed"><div class="video-embed"><iframe src="https://www.youtube.com/embed/videoseries?list=${uploads}" title="${esc(YOUTUBE.name)} on YouTube" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div></div></div>`;
+    const uploads = "UU" + (yt.channel_id || ch.channelId).slice(2);
+    return `${head}<div class="entry"><div class="embed"><div class="video-embed"><iframe src="https://www.youtube.com/embed/videoseries?list=${uploads}" title="${esc(ch.name)} on YouTube" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div></div></div>`;
   }
-  const videos = yt.videos.map((v) => `<h2 class="date-header">${esc(fmtDay(v.published))}</h2>
-    <div class="entry yt-video">
-      <h3 class="entry-title">${esc(v.title)} ${isNew(v.published) ? `<img src="img/new.gif" alt="new" class="new">` : ""}</h3>
+  let lastDay = null;
+  const videos = yt.videos.map((v) => {
+    const day = v.published ? fmtDay(v.published) : "Older uploads";
+    const dh = day !== lastDay ? `<h2 class="date-header">${esc(day)}</h2>` : "";
+    lastDay = day;
+    return `${dh}<div class="entry yt-video">
+      <h3 class="entry-title">${esc(v.title || "Untitled video")} ${v.published && isNew(v.published) ? `<img src="img/new.gif" alt="new" class="new">` : ""}</h3>
       <div class="embed"><div class="video-embed"><iframe src="https://www.youtube.com/embed/${esc(v.video_id)}" title="${esc(v.title)}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div></div>
-      <div class="entry-foot">posted to YouTube @ ${esc(fmtTime(v.published))} | <a href="https://www.youtube.com/watch?v=${esc(v.video_id)}" target="_blank" rel="noopener">watch on YouTube</a></div>
-    </div>`).join("");
+      <div class="entry-foot">${v.published ? `posted to YouTube @ ${esc(fmtTime(v.published))} | ` : ""}<a href="https://www.youtube.com/watch?v=${esc(v.video_id)}" target="_blank" rel="noopener">watch on YouTube</a></div>
+    </div>`;
+  }).join("");
   return head + videos;
+}
+
+function renderYouTube() {
+  return `<h2 class="page-h">${pix("youtube")} YouTube</h2>${renderVideoList(state.youtube, YOUTUBE)}`;
+}
+
+// Extra sections on the Old Stuff tab: the old Spotify artist and old YouTube channel
+function renderOldExtras() {
+  return `<h2 class="date-header">Old music</h2>
+    <div class="entry"><h3 class="entry-title">Calvin Kingston on Spotify</h3>${embedHtml(OLD_SPOTIFY)}
+      <div class="entry-foot"><a href="${OLD_SPOTIFY}" target="_blank" rel="noopener">open in Spotify</a></div></div>
+    <h2 class="date-header">Old YouTube</h2>
+    ${renderVideoList(state.oldYoutube, OLD_YOUTUBE)}`;
 }
 
 function renderFeed() {
@@ -632,10 +656,13 @@ function renderFeed() {
     lastDay = day;
     return dh + renderPost(p);
   }).join("");
-  const empty = !state.posts.length && !state.loadingPosts
+  const empty = !state.posts.length && !state.loadingPosts && cat !== "old"
     ? `<div class="entry"><div class="empty">${cat ? `Nothing in ${CATS[cat]} yet. Check back soon!` : "No entries yet."}</div></div>` : "";
   const more = !state.postsDone && state.posts.length ? `<div class="center"><button class="btn load-more" onclick="loadMore()">« Older Entries</button></div>` : "";
-  return `${head}${renderComposer()}${posts}${empty}${more}`;
+  const pinned = cat && state.pinned.length ? `<div class="pinned"><div class="pinned-t">${pix("pin")} Pinned</div>
+    <div class="pinned-grid">${state.pinned.map((p) => renderPost(p)).join("")}</div></div>` : "";
+  if (cat === "old") return `${head}<p class="page-sub muted">The archive: older music, videos and posts.</p>${pinned}${renderComposer()}${posts}${more}${renderOldExtras()}`;
+  return `${head}${pinned}${renderComposer()}${posts}${pinned && !state.posts.length ? "" : empty}${more}`;
 }
 
 function renderAlbum(p, media) {
@@ -741,10 +768,10 @@ function renderPost(p, full = false) {
   const comments = p.comment_count ? `${p.comment_count} comment${p.comment_count === 1 ? "" : "s"}` : "post a comment";
   return `<article class="entry post" id="p${p.id}">
     <div class="entry-head">${joshPic("sm")}<div class="who">${uicon}<b>${esc(state.config.about?.username || "josh")}</b>
-      ${isNew(p.created_at) ? `<img src="img/new.gif" alt="new" class="new">` : ""}</div>
+      ${isNew(p.created_at) ? `<img src="img/new.gif" alt="new" class="new">` : ""}${p.pinned ? ap("PINNED", "POST", "ap-pin") : ""}</div>
       ${cat}<button class="link-btn" onclick="postMenu(${p.id})" aria-label="Post options">[options]</button></div>
     ${title}
-    ${p.body ? `<div class="entry-body">${linkify(p.body)}</div>` : ""}
+    ${p.body && !(/^https?:\/\/\S+$/.test(p.body.trim()) && embedHtml(p.body.trim())) ? `<div class="entry-body">${linkify(p.body)}</div>` : ""}
     ${audio.length ? renderPlayer(p, audio, pics[0]) : media.length ? renderAlbum(p, media) : ""}
     ${downloadButton(p)}${embed}
     ${mood || music ? `<div class="meta">${mood}${music}</div>` : ""}
@@ -773,12 +800,12 @@ function openViewer(url) {
     <div class="win-buttons"><a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Open full size</a><button class="btn btn-primary" onclick="closeModal()">Close</button></div>`, "viewer-win");
 }
 
-function findPost(id) { return state.post?.id === id ? state.post : state.posts.find((p) => p.id === id); }
+function findPost(id) { return state.post?.id === id ? state.post : state.posts.find((p) => p.id === id) || state.pinned.find((p) => p.id === id); }
 
 async function likePost(id, btn) {
   if (needAccount("give props to posts")) return;
   const r = await api(`/posts/${id}/like`, { method: "POST" });
-  [state.post, ...state.posts].filter((p) => p?.id === id).forEach((p) => { p.liked = r.liked; p.like_count = r.like_count; });
+  [state.post, ...state.posts, ...state.pinned].filter((p) => p?.id === id).forEach((p) => { p.liked = r.liked; p.like_count = r.like_count; });
   btn.classList.toggle("liked", r.liked);
   btn.classList.remove("pop"); void btn.offsetWidth; if (r.liked) btn.classList.add("pop");
   btn.querySelector(".n").textContent = r.like_count || 0;
@@ -792,18 +819,25 @@ async function sharePost(id) {
 
 function postMenu(id) {
   const admin = state.me?.is_admin;
+  const p = findPost(id);
   modal(`<h3>Post options</h3>
     <button class="menu-item" onclick="closeModal();sharePost(${id})">${pix("card")} Share link</button>
     <button class="menu-item" onclick="nav('#/post/${id}')">${pix("chats")} Open post &amp; comments</button>
+    ${admin && p?.category ? `<button class="menu-item" onclick="pinPost(${id}, ${!p.pinned})">${pix("pin")} ${p.pinned ? "Unpin" : `Pin to the top of ${CATS[p.category]}`}</button>` : ""}
     ${admin ? `<button class="menu-item danger" onclick="deletePost(${id})">${pix("logout")} Delete post</button>` : ""}
     <div class="win-buttons"><button class="btn" onclick="closeModal()">Cancel</button></div>`);
+}
+async function pinPost(id, pinned) {
+  await api(`/posts/${id}/pin`, { method: "POST", body: { pinned } });
+  closeModal(); toast(pinned ? "Pinned to the top" : "Unpinned", true);
+  if (state.route.name === "post") { await loadPost(id); render(); } else { await Promise.all([loadPosts(true), loadPinned()]); render(); }
 }
 async function deletePost(id) {
   if (!confirm("Delete this post?")) return;
   await api("/posts/" + id, { method: "DELETE" });
   closeModal(); toast("Post deleted", true);
   await loadRecent();
-  if (state.route.name === "post") nav("#/feed"); else { await loadPosts(true); render(); }
+  if (state.route.name === "post") nav("#/feed"); else { await Promise.all([loadPosts(true), loadPinned()]); render(); }
 }
 
 // ---------------------------------------------------------------------------

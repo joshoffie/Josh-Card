@@ -181,10 +181,10 @@ router.get("/config", (req, res) => {
 router.post("/hits", (req, res) => res.json({ count: Hits.countVisit(req.ip) }));
 router.get("/hits", (req, res) => res.json({ count: Hits.total() }));
 
-// Every upload on Josh's YouTube channel, for the YouTube tab
+// Every upload on Josh's YouTube channel (?channel=old for his old channel on the Old Stuff tab)
 router.get("/youtube", wrap(async (req, res) => {
   res.set("Cache-Control", "public, max-age=300");
-  res.json({ channel_id: YouTube.CHANNEL_ID, videos: await YouTube.listVideos() });
+  res.json(await YouTube.listVideos(String(req.query.channel || "main")));
 }));
 
 // ---------------------------------------------------------------------------
@@ -239,6 +239,15 @@ router.get("/posts", (req, res) => {
     viewerId: req.user?.id,
   }));
 });
+
+// Pinned posts for a tab (?category=music)
+router.get("/posts/pinned", (req, res) => {
+  res.json(C.listPinned(String(req.query.category || ""), req.user?.id));
+});
+
+router.post("/posts/:id/pin", requireAdmin, wrap(async (req, res) => {
+  res.json(C.setPinned(id(req.params.id), !!req.body?.pinned));
+}));
 
 router.get("/posts/:id", wrap(async (req, res) => {
   const post = C.getPost(id(req.params.id), req.user?.id);

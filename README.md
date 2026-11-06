@@ -180,6 +180,7 @@ The site in `docs/` (GitHub Pages) talks to this server's `/api/social` API.
 | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | recommended | Media storage. Without them, member images are stored in `data/uploads` (needs a volume) and video posts are disabled |
 | `GIPHY_API_KEY` | optional | Turns on GIF search (free beta key) |
 | `YOUTUBE_CHANNEL_ID` | optional | Channel listed on the YouTube tab (defaults to Josh's channel); videos come from its free RSS feed, no API key |
+| `YOUTUBE_OLD_CHANNEL_ID` | optional | Old channel listed on the Old Stuff tab (defaults to @calvinkingston_); its back catalog is seeded from `src/data/old-youtube.json` |
 | `OPENAI_API_KEY` | optional | Adds AI moderation on top of the free rules |
 
 **Operational checklist**

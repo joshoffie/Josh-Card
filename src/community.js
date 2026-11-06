@@ -125,26 +125,45 @@ export function award(userId, reason, ref) {
 // ---------------------------------------------------------------------------
 const POST_SELECT = `
   SELECT p.id, p.post_type, p.title, p.body, p.media_url, COALESCE(p.category, '') AS category, p.created_at,
-    COALESCE(p.mood, '') AS mood, COALESCE(p.music, '') AS music, COALESCE(p.tracks, '') AS tracks,
+    COALESCE(p.mood, '') AS mood, COALESCE(p.music, '') AS music, COALESCE(p.tracks, '') AS tracks, (p.pinned_at IS NOT NULL) AS pinned,
     (SELECT COUNT(*) FROM post_likes l WHERE l.post_id = p.id) AS like_count,
     (SELECT COUNT(*) FROM post_comments c WHERE c.post_id = p.id AND c.status = 'visible') AS comment_count,
     EXISTS(SELECT 1 FROM post_likes l WHERE l.post_id = p.id AND l.user_id = @viewer) AS liked
   FROM posts p
   WHERE COALESCE(p.hidden, 0) = 0`;
 
+const shape = (p) => ({ ...p, liked: !!p.liked, pinned: !!p.pinned });
+
+// On a category tab, pinned posts are shown in their own box at the top, so the
+// regular list leaves them out. The home feed lists everything in date order.
 export function listPosts({ category = "", limit = 20, offset = 0, viewerId = 0 } = {}) {
   limit = Math.min(Math.max(parseInt(limit) || 20, 1), 50);
   offset = Math.max(parseInt(offset) || 0, 0);
   if (category && !CATEGORIES.includes(category)) return [];
-  const where = category ? " AND p.category = @category" : "";
+  const where = category ? " AND p.category = @category AND p.pinned_at IS NULL" : "";
   return db.prepare(`${POST_SELECT}${where} ORDER BY p.created_at DESC, p.id DESC LIMIT @limit OFFSET @offset`)
     .all({ viewer: viewerId || 0, category, limit, offset })
-    .map((p) => ({ ...p, liked: !!p.liked }));
+    .map(shape);
+}
+
+export function listPinned(category, viewerId = 0) {
+  if (!CATEGORIES.includes(category)) return [];
+  return db.prepare(`${POST_SELECT} AND p.category = @category AND p.pinned_at IS NOT NULL ORDER BY p.pinned_at ASC, p.id ASC`)
+    .all({ viewer: viewerId || 0, category })
+    .map(shape);
+}
+
+export function setPinned(postId, pinned) {
+  const p = getPost(postId);
+  if (!p) throw Object.assign(new Error("Post not found"), { status: 404 });
+  if (pinned && !p.category) throw new Error("Only posts filed under a tab can be pinned");
+  db.prepare(`UPDATE posts SET pinned_at = ${pinned ? "strftime('%Y-%m-%d %H:%M:%f', 'now')" : "NULL"} WHERE id = ?`).run(postId);
+  return getPost(postId);
 }
 
 export function getPost(id, viewerId = 0) {
   const p = db.prepare(`${POST_SELECT} AND p.id = @id`).get({ viewer: viewerId || 0, id });
-  return p ? { ...p, liked: !!p.liked } : null;
+  return p ? shape(p) : null;
 }
 
 export function togglePostLike(postId, userId) {
