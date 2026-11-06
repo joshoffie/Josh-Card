@@ -132,7 +132,7 @@ a:hover .pix, button:hover .pix, label:hover .pix, .tab.on .pix, .lb.on .pix { a
 /* Pinned ("sticky") posts at the top of a tab */
 .pinned { margin-bottom: 16px; padding: 8px; background: #000033; border: 2px solid #ffcc00; }
 .pinned-t { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; color: #ffcc00; font: bold 11px var(--head); text-transform: uppercase; letter-spacing: 0.2em; }
-.pinned-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.pinned-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .pinned-grid .entry { margin-bottom: 0; }
 .pinned .ap-pin { display: none; }
 
