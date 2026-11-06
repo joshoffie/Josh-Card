@@ -246,7 +246,7 @@ router.get("/posts/pinned", (req, res) => {
 });
 
 router.post("/posts/:id/pin", requireAdmin, wrap(async (req, res) => {
-  res.json(C.setPinned(id(req.params.id), !!req.body?.pinned));
+  res.json(C.setPinned(id(req.params.id), !!req.body?.pinned, { first: !!req.body?.first }));
 }));
 
 router.get("/posts/:id", wrap(async (req, res) => {

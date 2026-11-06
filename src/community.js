@@ -153,11 +153,20 @@ export function listPinned(category, viewerId = 0) {
     .map(shape);
 }
 
-export function setPinned(postId, pinned) {
+// The first pinned post on a tab is the featured one. `first` moves a post to the front.
+export function setPinned(postId, pinned, { first = false } = {}) {
   const p = getPost(postId);
   if (!p) throw Object.assign(new Error("Post not found"), { status: 404 });
   if (pinned && !p.category) throw new Error("Only posts filed under a tab can be pinned");
-  db.prepare(`UPDATE posts SET pinned_at = ${pinned ? "strftime('%Y-%m-%d %H:%M:%f', 'now')" : "NULL"} WHERE id = ?`).run(postId);
+  if (!pinned) {
+    db.prepare("UPDATE posts SET pinned_at = NULL WHERE id = ?").run(postId);
+  } else if (first) {
+    const min = db.prepare("SELECT MIN(pinned_at) m FROM posts WHERE category = ? AND pinned_at IS NOT NULL AND id != ?").get(p.category, postId)?.m;
+    db.prepare(`UPDATE posts SET pinned_at = ${min ? "strftime('%Y-%m-%d %H:%M:%f', ?, '-1 second')" : "strftime('%Y-%m-%d %H:%M:%f', 'now')"} WHERE id = ?`)
+      .run(...(min ? [min, postId] : [postId]));
+  } else if (!p.pinned) {
+    db.prepare("UPDATE posts SET pinned_at = strftime('%Y-%m-%d %H:%M:%f', 'now') WHERE id = ?").run(postId);
+  }
   return getPost(postId);
 }
 

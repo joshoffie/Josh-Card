@@ -473,11 +473,34 @@ def icon_pin():
     return frames
 
 
+
+def icon_clapper():
+    """Acting: a film clapperboard that claps shut on hover."""
+    import math
+    frames = []
+    for ang in (0, 32, 18, 0):
+        im = canvas()
+        rect(im, 1, 8, 14, 14, "D"); box(im, 1, 8, 14, 14, "k")
+        for x in range(2, 14):
+            px(im, x, 9, "w" if ((x - 2) // 2) % 2 == 0 else "k")
+        for y in (11, 13):
+            for x in range(3, 12 if y == 11 else 9):
+                px(im, x, y, "g")
+        a = math.radians(ang)
+        for t in range(14):
+            x = 1 + round(t * math.cos(a)); y = 7 - round(t * math.sin(a))
+            c = "w" if (t // 2) % 2 == 0 else "k"
+            px(im, x, y, c); px(im, x, y - 1, "k" if c == "w" else "g")
+        px(im, 1, 7, "G"); px(im, 1, 6, "G")
+        frames.append(im)
+    return frames
+
+
 ICONS = {
     "feed": icon_home, "software": icon_computer, "art": icon_palette, "music": icon_notes,
     "youtube": icon_tv, "chats": icon_mail, "friends": icon_people, "profile": icon_smiley_wink,
     "settings": icon_gear, "mod": icon_shield, "rules": icon_book, "card": icon_card,
-    "logout": icon_door, "login": icon_key, "old": icon_cassette, "pin": icon_pin,
+    "logout": icon_door, "login": icon_key, "old": icon_cassette, "pin": icon_pin, "acting": icon_clapper,
 }
 
 

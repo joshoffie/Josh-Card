@@ -49,7 +49,7 @@ ul { list-style: none; }
 .pix-settings { background-image: url(img/i-settings.png); } .pix-mod { background-image: url(img/i-mod.png); }
 .pix-rules { background-image: url(img/i-rules.png); } .pix-card { background-image: url(img/i-card.png); }
 .pix-logout { background-image: url(img/i-logout.png); } .pix-login { background-image: url(img/i-login.png); }
-.pix-old { background-image: url(img/i-old.png); } .pix-pin { background-image: url(img/i-pin.png); }
+.pix-old { background-image: url(img/i-old.png); } .pix-acting { background-image: url(img/i-acting.png); } .pix-pin { background-image: url(img/i-pin.png); }
 a:hover .pix, button:hover .pix, label:hover .pix, .tab.on .pix, .lb.on .pix { animation: pix4 0.6s steps(4) infinite; }
 @keyframes pix4 { from { background-position: 0 0; } to { background-position: -64px 0; } }
 .sprite-still { width: 16px; height: 16px; object-fit: none; object-position: 0 0; image-rendering: pixelated; vertical-align: -3px; }
@@ -121,8 +121,8 @@ a:hover .pix, button:hover .pix, label:hover .pix, .tab.on .pix, .lb.on .pix { a
 .cat-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border: 1px solid currentColor;
   font: bold 10px Verdana, sans-serif; text-transform: uppercase; letter-spacing: 0.08em; }
 .cat-tag:hover { text-decoration: none; background: #003366; }
-.cat-software { color: var(--software); } .cat-art { color: var(--art); } .cat-music { color: var(--music); } .cat-old { color: #cc9966; }
-.cat-software:hover { color: var(--software); } .cat-art:hover { color: var(--art); } .cat-music:hover { color: var(--music); } .cat-old:hover { color: #cc9966; }
+.cat-software { color: var(--software); } .cat-art { color: var(--art); } .cat-music { color: var(--music); } .cat-old { color: #cc9966; } .cat-acting { color: #cc99ff; }
+.cat-software:hover { color: var(--software); } .cat-art:hover { color: var(--art); } .cat-music:hover { color: var(--music); } .cat-old:hover { color: #cc9966; } .cat-acting:hover { color: #cc99ff; }
 .link-btn { background: none; border: 0; padding: 0; color: var(--link); font: inherit; text-transform: inherit; letter-spacing: inherit; }
 .link-btn:hover { color: var(--hover); text-decoration: underline; }
 .meta { margin-top: 10px; padding: 6px 8px; background: #000033; border: 1px solid #333366; font-size: 11px; }
@@ -135,6 +135,17 @@ a:hover .pix, button:hover .pix, label:hover .pix, .tab.on .pix, .lb.on .pix { a
 .pinned-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .pinned-grid .entry { margin-bottom: 0; }
 .pinned .ap-pin { display: none; }
+.imdb-card { display: flex; align-items: center; gap: 12px; color: var(--text); text-decoration: none; }
+.imdb-card:hover { border-color: var(--accent); color: #ffffff; }
+.imdb-card:hover .imdb-tag { transform: rotate(-4deg) scale(1.08); }
+.imdb-tag { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: #333366; color: #ffffff; font: 10px/1 "Silkscreen", monospace; letter-spacing: 1px; border: 2px outset #6666cc; transition: transform .1s steps(2); }
+.pin-label { margin: -12px -14px 10px; padding: 3px 8px; font: 8px/13px "Silkscreen", monospace; letter-spacing: 1px; text-transform: uppercase; }
+.pin-a { border: 2px solid var(--accent); }
+.pin-a .pin-label { background: var(--accent); color: #000000; font-size: 16px; line-height: 22px; }
+.pin-a .entry-title { font: 30px/1.1 var(--title); text-transform: uppercase; letter-spacing: 1px; color: #ffffff; text-shadow: 2px 2px 0 #0066cc; }
+.pin-b { margin-left: 48px; border-style: dashed; }
+.pin-b .pin-label { background: #333366; color: #cccccc; font-size: 10px; line-height: 15px; }
+.pin-b .entry-title { font-size: 14px; color: var(--text2); }
 
 /* Photo album */
 .album { margin-top: 10px; }
@@ -493,6 +504,9 @@ a:hover .av, .av:hover { animation: frame 0.5s steps(1) infinite; }
   .side { width: 100%; margin-top: 8px; }
   .entry { padding: 10px; }
   .fs-title { margin: -10px -10px 8px; }
+  .pin-label { margin: -10px -10px 8px; }
+  .pin-b { margin-left: 18px; }
+  .pin-a .entry-title { font-size: 24px; }
   .page-h { font-size: 22px; }
   .input, select.input, textarea.input, .chat-input textarea, .gif-panel .input { font-size: 16px; }
   .composer-grid { grid-template-columns: 1fr; }

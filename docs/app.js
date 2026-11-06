@@ -4,7 +4,9 @@
 // LiveJournal moods, an AIM-style messenger, XP pop-up windows and GIFs.
 // =========================================================================
 const API = window.JOSH_API || "https://josh-card-production.up.railway.app";
-const CATS = { software: "Software", art: "Art", music: "Music", old: "Old Stuff" };
+const CATS = { software: "Software", art: "Art", music: "Music", acting: "Acting", old: "Old Stuff" };
+// Acting tab: Josh's demo reel and IMDb page
+const ACTING = { reel: "EEIDRL9FNV0", reelTitle: "Joshua Hoffman - Demo Reel", imdb: "https://www.imdb.com/name/nm6207093/" };
 // Josh's YouTube channels: the current one (YouTube tab) and his old one (Old Stuff tab)
 const YOUTUBE = { channelId: "UCGHriOkfa6n_a0LawFbTrQA", name: "Josh Hoffman", handle: "@JoshHoffmanMusic" };
 const OLD_YOUTUBE = { channelId: "UC58D_1R64itBfH4wjP8E8jQ", name: "Calvin Kingston", handle: "@calvinkingston_" };
@@ -315,6 +317,7 @@ function navItems() {
     { key: "art", label: "Art", href: "#/art" },
     { key: "music", label: "Music", href: "#/music" },
     { key: "youtube", label: "YouTube", href: "#/youtube" },
+    { key: "acting", label: "Acting", href: "#/acting" },
     { key: "old", label: "Old Stuff", href: "#/old" },
     { key: "chats", label: "Chats", href: "#/chats", badge: "unread_chats" },
   ];
@@ -408,6 +411,7 @@ function renderSide() {
     <ul class="stars">
       <li><a href="https://open.spotify.com/artist/4tohiTZWHRUFTvF8F6hOnk" target="_blank" rel="noopener">Josh Hoffman on Spotify</a></li>
       <li><a href="https://www.youtube.com/channel/${YOUTUBE.channelId}" target="_blank" rel="noopener">${esc(YOUTUBE.handle)} on YouTube</a></li>
+      <li><a href="${ACTING.imdb}" target="_blank" rel="noopener">Josh on IMDb</a></li>
     </ul>`);
   const blinkies = `<div class="blinkies">
     <img src="img/blinkie-blog.gif" alt="Josh's Blog" width="150" height="20">
@@ -488,13 +492,14 @@ function mediaList(p) {
   return [m];
 }
 const isVideo = (u) => /\.(mp4|mov|webm|m4v)(\?|$)/i.test(u) || /\/video\/upload\//.test(u);
-function embedHtml(url) {
+function embedHtml(url, tall = 0) {
   url = String(url || "");
   let m;
   if (/^https:\/\/open\.spotify\.com\//.test(url)) {
     const e = url.replace("open.spotify.com/", "open.spotify.com/embed/").split("?")[0];
-    // Artists, playlists and albums get the tall player with the track list
-    const h = /open\.spotify\.com\/(?:intl-[\w-]+\/)?(?:artist|playlist|album|show)\//.test(url) ? 352 : 152;
+    // Artists, playlists and albums get the full player with the track list. Spotify only
+    // shows the list from about 380px tall; under that it switches to the small card.
+    const h = /open\.spotify\.com\/(?:intl-[\w-]+\/)?(?:artist|playlist|album|show)\//.test(url) ? (tall || 380) : 152;
     return `<div class="embed"><iframe src="${esc(e)}" height="${h}" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe></div>`;
   }
   if ((m = url.match(/^https:\/\/(?:www\.|m\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([\w-]{6,})/))) {
@@ -505,10 +510,10 @@ function embedHtml(url) {
   }
   return "";
 }
-function firstEmbed(p) {
-  for (const u of mediaList(p)) if (embedHtml(u)) return embedHtml(u);
+function firstEmbed(p, tall = 0) {
+  for (const u of mediaList(p)) if (embedHtml(u)) return embedHtml(u, tall);
   const links = String(p.body || "").match(/https?:\/\/[^\s]+/g) || [];
-  for (const l of links) if (embedHtml(l)) return embedHtml(l);
+  for (const l of links) if (embedHtml(l)) return embedHtml(l, tall);
   return "";
 }
 
@@ -646,6 +651,19 @@ function renderOldExtras() {
     ${renderVideoList(state.oldYoutube, OLD_YOUTUBE)}`;
 }
 
+// Top of the Acting tab: the demo reel and a link to the IMDb page
+function renderActingTop() {
+  return `<div class="entry reel">
+      <h3 class="entry-title">${pix("acting")} Demo Reel</h3>
+      <div class="embed"><div class="video-embed"><iframe src="https://www.youtube.com/embed/${ACTING.reel}" title="${esc(ACTING.reelTitle)}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div></div>
+      <div class="entry-foot"><a href="https://www.youtube.com/watch?v=${ACTING.reel}" target="_blank" rel="noopener">watch on YouTube</a></div>
+    </div>
+    <a class="entry imdb-card" href="${ACTING.imdb}" target="_blank" rel="noopener">
+      <span class="imdb-tag">${pix("acting")} IMDb</span>
+      <span><b>Josh on IMDb</b><br><span class="muted">Full credits and profile »</span></span>
+    </a>`;
+}
+
 function renderFeed() {
   const cat = currentCategory();
   const head = cat ? `<h2 class="page-h">${pix(cat)} ${CATS[cat]}</h2>` : "";
@@ -656,11 +674,17 @@ function renderFeed() {
     lastDay = day;
     return dh + renderPost(p);
   }).join("");
-  const empty = !state.posts.length && !state.loadingPosts && cat !== "old"
+  const empty = !state.posts.length && !state.loadingPosts && cat !== "old" && cat !== "acting"
     ? `<div class="entry"><div class="empty">${cat ? `Nothing in ${CATS[cat]} yet. Check back soon!` : "No entries yet."}</div></div>` : "";
   const more = !state.postsDone && state.posts.length ? `<div class="center"><button class="btn load-more" onclick="loadMore()">« Older Entries</button></div>` : "";
+  // The first pinned post is the featured one. On Music that's the A-side (main project),
+  // and the rest are B-sides.
+  const pinLook = (i) => cat === "music"
+    ? (i === 0 ? { cls: "pin-a", label: "★ A-side · main project", tall: 700 } : { cls: "pin-b", label: "B-side · side project", tall: 500 })
+    : (i === 0 && state.pinned.length > 1 ? { cls: "pin-a", label: "★ Featured", tall: 480 } : { cls: "", label: "", tall: 0 });
   const pinned = cat && state.pinned.length ? `<div class="pinned"><div class="pinned-t">${pix("pin")} Pinned</div>
-    <div class="pinned-grid">${state.pinned.map((p) => renderPost(p)).join("")}</div></div>` : "";
+    <div class="pinned-grid">${state.pinned.map((p, i) => renderPost(p, false, pinLook(i))).join("")}</div></div>` : "";
+  if (cat === "acting") return `${head}${renderActingTop()}${pinned}${renderComposer()}${posts}${more}`;
   if (cat === "old") return `${head}<p class="page-sub muted">The archive: older music, videos and posts.</p>${pinned}${renderComposer()}${posts}${more}${renderOldExtras()}`;
   return `${head}${pinned}${renderComposer()}${posts}${pinned && !state.posts.length ? "" : empty}${more}`;
 }
@@ -756,17 +780,18 @@ document.addEventListener("ended", (e) => {
   else { ampLoad(r, 0); r.querySelector(".amp-state").textContent = "■"; }
 }, true);
 
-function renderPost(p, full = false) {
+function renderPost(p, full = false, pin = null) {
   const media = mediaList(p).filter((u) => !embedHtml(u));
   const audio = media.filter(isAudio);
   const pics = media.filter((u) => !isAudio(u));
-  const embed = firstEmbed(p);
+  const embed = firstEmbed(p, pin?.tall || 0);
   const cat = p.category ? `<a class="cat-tag cat-${p.category}" href="#/${p.category}">${pix(p.category)}${CATS[p.category]}</a>` : "";
   const title = p.title ? `<h3 class="entry-title"><a href="#/post/${p.id}">${esc(p.title)}</a></h3>` : "";
   const mood = p.mood ? `<div class="meta-line"><b>current mood:</b> <img src="img/mood-${esc(p.mood)}.gif" alt="" width="15" height="15"> ${esc(p.mood)}</div>` : "";
   const music = p.music ? `<div class="meta-line"><b>current music:</b> ♫ ${esc(p.music)}</div>` : "";
   const comments = p.comment_count ? `${p.comment_count} comment${p.comment_count === 1 ? "" : "s"}` : "post a comment";
-  return `<article class="entry post" id="p${p.id}">
+  return `<article class="entry post ${pin?.cls || ""}" id="p${p.id}">
+    ${pin?.label ? `<div class="pin-label">${pin.label}</div>` : ""}
     <div class="entry-head">${joshPic("sm")}<div class="who">${uicon}<b>${esc(state.config.about?.username || "josh")}</b>
       ${isNew(p.created_at) ? `<img src="img/new.gif" alt="new" class="new">` : ""}${p.pinned ? ap("PINNED", "POST", "ap-pin") : ""}</div>
       ${cat}<button class="link-btn" onclick="postMenu(${p.id})" aria-label="Post options">[options]</button></div>
@@ -824,12 +849,13 @@ function postMenu(id) {
     <button class="menu-item" onclick="closeModal();sharePost(${id})">${pix("card")} Share link</button>
     <button class="menu-item" onclick="nav('#/post/${id}')">${pix("chats")} Open post &amp; comments</button>
     ${admin && p?.category ? `<button class="menu-item" onclick="pinPost(${id}, ${!p.pinned})">${pix("pin")} ${p.pinned ? "Unpin" : `Pin to the top of ${CATS[p.category]}`}</button>` : ""}
+    ${admin && p?.pinned && state.pinned[0]?.id !== id ? `<button class="menu-item" onclick="pinPost(${id}, true, true)">${pix("pin")} ${p.category === "music" ? "Make this the A-side (main)" : "Make this the featured pin"}</button>` : ""}
     ${admin ? `<button class="menu-item danger" onclick="deletePost(${id})">${pix("logout")} Delete post</button>` : ""}
     <div class="win-buttons"><button class="btn" onclick="closeModal()">Cancel</button></div>`);
 }
-async function pinPost(id, pinned) {
-  await api(`/posts/${id}/pin`, { method: "POST", body: { pinned } });
-  closeModal(); toast(pinned ? "Pinned to the top" : "Unpinned", true);
+async function pinPost(id, pinned, first = false) {
+  await api(`/posts/${id}/pin`, { method: "POST", body: { pinned, first } });
+  closeModal(); toast(first ? "Moved to the front" : pinned ? "Pinned to the top" : "Unpinned", true);
   if (state.route.name === "post") { await loadPost(id); render(); } else { await Promise.all([loadPosts(true), loadPinned()]); render(); }
 }
 async function deletePost(id) {

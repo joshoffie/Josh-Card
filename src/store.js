@@ -235,7 +235,7 @@ const listPosts = db.prepare(
 const deletePost = db.prepare("UPDATE posts SET hidden = 1 WHERE id = ?");
 const getPost = db.prepare("SELECT * FROM posts WHERE id = ?");
 
-export const CATEGORIES = ["software", "art", "music", "old"];
+export const CATEGORIES = ["software", "art", "music", "acting", "old"];
 
 export const MOODS = ["happy", "excited", "chill", "creative", "sleepy", "hungry", "sad", "annoyed", "loved",
   "cool", "accomplished", "nostalgic", "silly", "thoughtful", "busy"];
