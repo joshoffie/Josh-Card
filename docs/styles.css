@@ -287,10 +287,14 @@ textarea.input { resize: vertical; min-height: 70px; }
 .auth-wrap { max-width: 400px; margin: 2rem auto; }
 .auth-wrap h1 { font-size: 1.6rem; color: var(--white); margin-bottom: 0.3rem; }
 .auth-wrap .sub { color: var(--text3); margin-bottom: 1.4rem; font-size: 0.92rem; }
+.yt-head { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; padding: 0.9rem 1rem 0.3rem; }
+.yt-head .btn { white-space: nowrap; flex-shrink: 0; }
+.yt-name { font-weight: 750; color: var(--white); font-size: 1.05rem; }
+.tabs-inline a { text-decoration: none; }
 .load-more { display: block; margin: 0.5rem auto 1.5rem; }
 .tabs-inline { display: flex; gap: 0.4rem; margin-bottom: 0.8rem; flex-wrap: wrap; }
-.tabs-inline button { background: var(--surface2); border: 1px solid var(--border2); color: var(--text2); border-radius: 999px; padding: 0.35rem 0.85rem; font-size: 0.8rem; font-weight: 600; }
-.tabs-inline button.on { background: var(--white); color: #000; border-color: var(--white); }
+.tabs-inline button, .tabs-inline a { background: var(--surface2); border: 1px solid var(--border2); color: var(--text2); border-radius: 999px; padding: 0.35rem 0.85rem; font-size: 0.8rem; font-weight: 600; }
+.tabs-inline button.on, .tabs-inline a.on { background: var(--white); color: #000; border-color: var(--white); }
 
 /* Phone overrides that must come after the base rules */
 @media (max-width: 768px) {

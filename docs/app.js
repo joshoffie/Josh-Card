@@ -3,6 +3,8 @@
 // =========================================================================
 const API = window.JOSH_API || "https://josh-card-production.up.railway.app";
 const CATS = { software: "Software", art: "Art", music: "Music" };
+// Josh's YouTube channel, shown in the Music tab's YouTube section
+const YOUTUBE = { channelId: "UCGHriOkfa6n_a0LawFbTrQA", name: "Josh Hoffman", handle: "@JoshHoffmanMusic" };
 const PAGE = 20;
 
 const state = {
@@ -173,7 +175,7 @@ async function go() {
     return;
   }
   try {
-    if (["feed", ...Object.keys(CATS)].includes(name)) await loadPosts(true);
+    if (["feed", ...Object.keys(CATS)].includes(name) && !isYouTubeSection()) await loadPosts(true);
     if (name === "post") await loadPost(params[0]);
     if (name === "u") { state.profile = null; render(); state.profile = await api("/users/" + encodeURIComponent(params[0])); }
     if (name === "friends") await loadFriends();
@@ -450,9 +452,30 @@ async function submitPost() {
   } finally { btn.disabled = false; btn.textContent = "Post"; }
 }
 
+function isYouTubeSection() { return state.route.name === "music" && state.route.params[0] === "youtube"; }
+
+function musicTabs() {
+  const yt = isYouTubeSection();
+  return `<div class="tabs-inline"><a href="#/music" class="${yt ? "" : "on"}">Posts</a><a href="#/music/youtube" class="${yt ? "on" : ""}">YouTube</a></div>`;
+}
+
+function renderYouTube() {
+  const channel = `https://www.youtube.com/channel/${YOUTUBE.channelId}`;
+  // A channel's uploads playlist id is its channel id with "UC" swapped for "UU"
+  const uploads = "UU" + YOUTUBE.channelId.slice(2);
+  return `<article class="post yt-section">
+    <div class="yt-head"><div><div class="yt-name">${esc(YOUTUBE.name)}</div><div class="muted">${esc(YOUTUBE.handle)} on YouTube</div></div>
+      <a class="btn btn-primary" href="${channel}" target="_blank" rel="noopener noreferrer">Open channel</a></div>
+    <div class="embed"><div class="video-embed"><iframe src="https://www.youtube.com/embed/videoseries?list=${uploads}" title="${esc(YOUTUBE.name)} on YouTube" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div></div>
+    <div class="post-foot-pad"></div>
+  </article>`;
+}
+
 function renderFeed() {
   const cat = currentCategory();
-  const head = cat ? `<div class="section-title page-title"><span class="cat-chip cat-${cat}">${CATS[cat]}</span></div>` : "";
+  const head = (cat ? `<div class="section-title page-title"><span class="cat-chip cat-${cat}">${CATS[cat]}</span></div>` : "")
+    + (cat === "music" ? musicTabs() : "");
+  if (isYouTubeSection()) return `${head}${renderYouTube()}`;
   const posts = state.posts.map((p) => renderPost(p)).join("");
   const empty = !state.posts.length && !state.loadingPosts
     ? `<div class="empty">${cat ? `Nothing in ${CATS[cat]} yet.` : "No posts yet."}</div>` : "";
