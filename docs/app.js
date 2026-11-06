@@ -79,6 +79,7 @@ const ICON = {
   code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
   art: '<circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 000 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4A5.6 5.6 0 0022 9.8C22 5.5 17.5 2 12 2z"/>',
   music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  youtube: '<rect x="2" y="5" width="20" height="14" rx="4"/><polygon points="10 9 15 12 10 15"/>',
   chat: '<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>',
   users: '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',
   user: '<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>',
@@ -175,13 +176,15 @@ async function go() {
     return;
   }
   try {
-    if (["feed", ...Object.keys(CATS)].includes(name) && !isYouTubeSection()) await loadPosts(true);
+    if (name === "music" && params[0] === "youtube") { location.replace("#/youtube"); return; } // old link
+    if (["feed", ...Object.keys(CATS)].includes(name)) await loadPosts(true);
     if (name === "post") await loadPost(params[0]);
     if (name === "u") { state.profile = null; render(); state.profile = await api("/users/" + encodeURIComponent(params[0])); }
     if (name === "friends") await loadFriends();
     if (name === "chats") state.chats = await api("/chats");
     if (name === "chat") { state.chat = null; render(); await loadChat(params[0]); startChatPoll(); }
     if (name === "mod") state.mod = await api("/mod/queue");
+    if (name === "youtube") { state.youtube = null; render(); state.youtube = await api("/youtube").catch(() => ({ error: true })); }
   } catch (e) {
     if (e.status === 404) { render(`<div class="empty">That page doesn't exist anymore.</div>`); return; }
     toast(e.message);
@@ -251,6 +254,7 @@ function navItems() {
     { key: "software", label: "Software", icon: "code", href: "#/software" },
     { key: "art", label: "Art", icon: "art", href: "#/art" },
     { key: "music", label: "Music", icon: "music", href: "#/music" },
+    { key: "youtube", label: "YouTube", icon: "youtube", href: "#/youtube" },
     { key: "chats", label: "Chats", icon: "chat", href: "#/chats", badge: "unread_chats" },
   ];
 }
@@ -294,7 +298,7 @@ function renderSidebar() {
 
 function topTitle() {
   const n = state.route.name;
-  const titles = { feed: "Feed", software: "Software", art: "Art", music: "Music", chats: "Chats", friends: "Friends",
+  const titles = { feed: "Feed", software: "Software", art: "Art", music: "Music", youtube: "YouTube", chats: "Chats", friends: "Friends",
     settings: "Settings", mod: "Moderation", rules: "Rules", login: "Log in", join: "Join", post: "Post", chat: "Chat", u: "Profile" };
   return titles[n] || "Josh's Blog";
 }
@@ -337,6 +341,7 @@ function render(override) {
     const gated = ["chats", "chat", "friends", "settings", "mod", "u"].includes(n) && !state.me;
     if (gated) content = renderGate(n);
     else if (n === "feed" || CATS[n]) content = renderFeed();
+    else if (n === "youtube") content = `<div class="section-title page-title">YouTube</div>${renderYouTube()}`;
     else if (n === "post") content = renderPostPage();
     else if (n === "u") content = renderProfile();
     else if (n === "friends") content = renderFriends();
@@ -452,30 +457,32 @@ async function submitPost() {
   } finally { btn.disabled = false; btn.textContent = "Post"; }
 }
 
-function isYouTubeSection() { return state.route.name === "music" && state.route.params[0] === "youtube"; }
-
-function musicTabs() {
-  const yt = isYouTubeSection();
-  return `<div class="tabs-inline"><a href="#/music" class="${yt ? "" : "on"}">Posts</a><a href="#/music/youtube" class="${yt ? "on" : ""}">YouTube</a></div>`;
-}
-
 function renderYouTube() {
-  const channel = `https://www.youtube.com/channel/${YOUTUBE.channelId}`;
-  // A channel's uploads playlist id is its channel id with "UC" swapped for "UU"
-  const uploads = "UU" + YOUTUBE.channelId.slice(2);
-  return `<article class="post yt-section">
+  const yt = state.youtube;
+  const channel = `https://www.youtube.com/channel/${yt?.channel_id || YOUTUBE.channelId}`;
+  const head = `<article class="post yt-section">
     <div class="yt-head"><div><div class="yt-name">${esc(YOUTUBE.name)}</div><div class="muted">${esc(YOUTUBE.handle)} on YouTube</div></div>
       <a class="btn btn-primary" href="${channel}" target="_blank" rel="noopener noreferrer">Open channel</a></div>
-    <div class="embed"><div class="video-embed"><iframe src="https://www.youtube.com/embed/videoseries?list=${uploads}" title="${esc(YOUTUBE.name)} on YouTube" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div></div>
-    <div class="post-foot-pad"></div>
-  </article>`;
+    <div class="post-foot-pad"></div></article>`;
+  if (!yt) return `${head}<div class="empty">Loading videos…</div>`;
+  if (yt.error || !yt.videos?.length) {
+    // Couldn't list the videos: fall back to YouTube's own uploads player
+    const uploads = "UU" + (yt.channel_id || YOUTUBE.channelId).slice(2);
+    return `${head}<article class="post"><div class="embed"><div class="video-embed"><iframe src="https://www.youtube.com/embed/videoseries?list=${uploads}" title="${esc(YOUTUBE.name)} on YouTube" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div></div><div class="post-foot-pad"></div></article>`;
+  }
+  const videos = yt.videos.map((v) => {
+    const date = v.published ? new Date(v.published).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "";
+    return `<article class="post yt-video">
+      <div class="embed"><div class="video-embed"><iframe src="https://www.youtube.com/embed/${esc(v.video_id)}" title="${esc(v.title)}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div></div>
+      <div class="yt-meta"><div class="yt-vtitle">${esc(v.title)}</div>${date ? `<div class="muted small">${esc(date)}</div>` : ""}</div>
+    </article>`;
+  }).join("");
+  return head + videos;
 }
 
 function renderFeed() {
   const cat = currentCategory();
-  const head = (cat ? `<div class="section-title page-title"><span class="cat-chip cat-${cat}">${CATS[cat]}</span></div>` : "")
-    + (cat === "music" ? musicTabs() : "");
-  if (isYouTubeSection()) return `${head}${renderYouTube()}`;
+  const head = cat ? `<div class="section-title page-title"><span class="cat-chip cat-${cat}">${CATS[cat]}</span></div>` : "";
   const posts = state.posts.map((p) => renderPost(p)).join("");
   const empty = !state.posts.length && !state.loadingPosts
     ? `<div class="empty">${cat ? `Nothing in ${CATS[cat]} yet.` : "No posts yet."}</div>` : "";

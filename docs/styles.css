@@ -290,6 +290,8 @@ textarea.input { resize: vertical; min-height: 70px; }
 .yt-head { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; padding: 0.9rem 1rem 0.3rem; }
 .yt-head .btn { white-space: nowrap; flex-shrink: 0; }
 .yt-name { font-weight: 750; color: var(--white); font-size: 1.05rem; }
+.yt-meta { padding: 0.6rem 1rem 0.9rem; }
+.yt-vtitle { font-weight: 650; color: var(--white); margin-bottom: 0.15rem; }
 .tabs-inline a { text-decoration: none; }
 .load-more { display: block; margin: 0.5rem auto 1.5rem; }
 .tabs-inline { display: flex; gap: 0.4rem; margin-bottom: 0.8rem; flex-wrap: wrap; }

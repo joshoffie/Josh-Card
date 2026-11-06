@@ -168,6 +168,7 @@ The site in `docs/` (GitHub Pages) talks to this server's `/api/social` API.
 | `ADMIN_USERNAMES` | optional | Comma list of admin usernames (default `josh`) |
 | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | recommended | Media storage. Without them, member images are stored in `data/uploads` (needs a volume) and video posts are disabled |
 | `GIPHY_API_KEY` | optional | Turns on GIF search (free beta key) |
+| `YOUTUBE_CHANNEL_ID` | optional | Channel listed on the YouTube tab (defaults to Josh's channel); videos come from its free RSS feed, no API key |
 | `OPENAI_API_KEY` | optional | Adds AI moderation on top of the free rules |
 
 **Operational checklist**

@@ -14,6 +14,7 @@ import { createPost, removePost, CATEGORIES } from "./store.js";
 import * as S from "./social.js";
 import * as C from "./community.js";
 import * as Chat from "./chat.js";
+import * as YouTube from "./youtube.js";
 import * as Safety from "./safety.js";
 import { checkText, checkImage, sniffImage, validGifUrl, aiModerationEnabled } from "./moderation.js";
 import { limit, clientIp, hit } from "./ratelimit.js";
@@ -170,6 +171,12 @@ router.get("/config", (req, res) => {
     points: C.POINTS,
   });
 });
+
+// Every upload on Josh's YouTube channel, for the YouTube tab
+router.get("/youtube", wrap(async (req, res) => {
+  res.set("Cache-Control", "public, max-age=300");
+  res.json({ channel_id: YouTube.CHANNEL_ID, videos: await YouTube.listVideos() });
+}));
 
 // ---------------------------------------------------------------------------
 // Auth
