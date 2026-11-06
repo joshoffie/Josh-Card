@@ -28,7 +28,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS youtube_videos (
 try { db.exec("ALTER TABLE youtube_videos ADD COLUMN pos INTEGER DEFAULT 0"); } catch {}
 
 // Back catalog of the old channel (older than its feed reaches), newest first
-const seedFile = resolve(dirname(fileURLToPath(import.meta.url)), "data", "old-youtube.json");
+const seedFile = resolve(dirname(fileURLToPath(import.meta.url)), "seed", "old-youtube.json");
 if (existsSync(seedFile)) {
   try {
     const seed = JSON.parse(readFileSync(seedFile, "utf8"));
