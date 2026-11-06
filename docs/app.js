@@ -29,7 +29,7 @@ const state = {
   youtube: null,
   recent: [], hits: null,
   cc: { replyTo: null, gif: null, file: null, gifOpen: false },   // comment composer
-  pc: { files: [] },                                               // Josh's post composer
+  pc: { files: [], links: [] },                                               // Josh's post composer
   mc: { gifOpen: false },                                          // message composer
 };
 
@@ -398,7 +398,7 @@ function renderSide() {
     : sideBox("Hello, Guest!", `<p>Get a free screen name to comment, give props, add friends and chat. Members must be 18+.</p>
         <div class="row" style="margin-top:6px"><a class="btn btn-primary btn-sm" href="#/join">Join</a><a class="btn btn-sm" href="#/login">Sign on</a></div>`);
   const recent = state.recent.length ? sideBox("Recent Posts", `<ul class="stars">${state.recent.slice(0, 8).map((p) => {
-    const label = p.title || String(p.body || "").replace(/https?:\/\/\S+/g, "").trim().slice(0, 42) || (p.category ? `${CATS[p.category]} post` : "Post");
+    const label = p.title || String(p.body || "").replace(/https?:\/\/\S+/g, "").trim().slice(0, 42) || postLinks(p)[0]?.label || (p.category ? `${CATS[p.category]} post` : "Post");
     return `<li><a href="#/post/${p.id}">${esc(label)}</a></li>`;
   }).join("")}</ul>`) : "";
   const links = sideBox("Josh's Stuff", `
@@ -510,11 +510,36 @@ function embedHtml(url, tall = 0) {
   }
   return "";
 }
+function postLinks(p) {
+  try { const l = JSON.parse(p.links || "[]"); return Array.isArray(l) ? l.filter((x) => /^https?:\/\//i.test(String(x?.url || ""))) : []; } catch { return []; }
+}
+function firstEmbedUrl(p) {
+  const bodyLinks = String(p.body || "").match(/https?:\/\/[^\s]+/g) || [];
+  return [...mediaList(p), ...bodyLinks, ...postLinks(p).map((l) => l.url)].find((u) => embedHtml(u)) || "";
+}
 function firstEmbed(p, tall = 0) {
-  for (const u of mediaList(p)) if (embedHtml(u)) return embedHtml(u, tall);
-  const links = String(p.body || "").match(/https?:\/\/[^\s]+/g) || [];
-  for (const l of links) if (embedHtml(l)) return embedHtml(l, tall);
-  return "";
+  const u = firstEmbedUrl(p);
+  return u ? embedHtml(u, tall) : "";
+}
+// Short site name for a link card: imdb.com -> "imdb", open.spotify.com -> "spotify", bbc.co.uk -> "bbc"
+function siteName(host) {
+  const parts = host.replace(/^www\./, "").split(".");
+  let i = parts.length - 2;
+  if (i > 0 && parts[i].length <= 3 && parts[i + 1].length <= 2) i--;
+  return (parts[Math.max(i, 0)] || host).slice(0, 14);
+}
+function linkCard(url, label = "", sub = "") {
+  let host = "", where = "";
+  try { const u = new URL(url); host = u.hostname.replace(/^www\./, ""); where = (host + u.pathname).replace(/\/$/, ""); } catch { return ""; }
+  return `<a class="link-card" href="${esc(url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">
+    <span class="link-tag">${pix("link")} ${esc(siteName(host))}</span>
+    <span class="link-text"><b>${esc(label || host)}</b><span class="muted">${esc(sub || (label ? host : where))} »</span></span></a>`;
+}
+// Cards for the links Josh attached (the one already showing as a player is skipped)
+function renderLinks(p) {
+  const shown = firstEmbedUrl(p);
+  const cards = postLinks(p).filter((l) => l.url !== shown).map((l) => linkCard(l.url, l.label)).join("");
+  return cards ? `<div class="link-cards">${cards}</div>` : "";
 }
 
 // Software posts get a Download button for the first non-embed link in the post
@@ -538,6 +563,7 @@ function renderComposer() {
     <div class="field-row"><label for="pc-title">Subject:</label><input class="input" id="pc-title" maxlength="140" placeholder="(optional)"></div>
     <textarea class="input" id="pc-text" placeholder="What's new, Josh?" rows="4"></textarea>
     <div class="thumbs" id="pc-thumbs">${renderThumbs()}</div>
+    <div id="pc-links">${renderLinkRows()}</div>
     <div class="composer-grid">
       <label>Filed under:<select class="input" id="pc-cat">
         <option value="">Home page only</option>
@@ -552,6 +578,7 @@ function renderComposer() {
         <input type="file" id="pc-files" accept="image/*,video/*" multiple style="display:none" onchange="addPostFiles(this)"></label>
       <label class="btn">${pix("music")} Add music
         <input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.aif,.aiff" multiple style="display:none" onchange="addPostFiles(this)"></label>
+      <button class="btn" type="button" onclick="addLinkRow()">${pix("link")} Add link</button>
       <span style="flex:1"></span>
       <button class="btn btn-primary" id="pc-btn" onclick="submitPost()">Post Entry</button>
     </div></fieldset>`;
@@ -590,11 +617,31 @@ function addPostFiles(input) {
   document.getElementById("pc-thumbs").innerHTML = renderThumbs();
 }
 function removePostFile(i) { state.pc.files.splice(i, 1); document.getElementById("pc-thumbs").innerHTML = renderThumbs(); }
+function renderLinkRows() {
+  return state.pc.links.map((l, i) => `<div class="le">${pix("link")}
+    <input class="input le-url" value="${esc(l.url)}" maxlength="600" placeholder="https://..." aria-label="Link address" oninput="state.pc.links[${i}].url=this.value">
+    <input class="input le-label" value="${esc(l.label)}" maxlength="80" placeholder="Link text (optional)" aria-label="Link text" oninput="state.pc.links[${i}].label=this.value">
+    <button class="btn btn-sm" type="button" onclick="removeLinkRow(${i})" aria-label="Remove link">✕</button></div>`).join("");
+}
+function addLinkRow() {
+  if (state.pc.links.length >= 5) return toast("Up to 5 links per post");
+  state.pc.links.push({ url: "", label: "" });
+  document.getElementById("pc-links").innerHTML = renderLinkRows();
+  document.querySelector("#pc-links .le:last-child .le-url")?.focus();
+}
+function removeLinkRow(i) { state.pc.links.splice(i, 1); document.getElementById("pc-links").innerHTML = renderLinkRows(); }
 
 async function submitPost() {
   const text = document.getElementById("pc-text").value.trim();
   const title = document.getElementById("pc-title").value.trim();
-  if (!text && !title && !state.pc.files.length) return toast("Write something or add media");
+  const links = state.pc.links.map((l) => ({ url: l.url.trim(), label: l.label.trim() })).filter((l) => l.url);
+  for (const l of links) {
+    const u = /^[a-z][a-z0-9+.-]*:/i.test(l.url) ? l.url : "https://" + l.url;
+    let ok = false;
+    try { const x = new URL(u); ok = /^https?:$/.test(x.protocol) && x.hostname.includes("."); } catch { ok = false; }
+    if (!ok) return toast(`"${l.url}" isn't a web link`);
+  }
+  if (!text && !title && !state.pc.files.length && !links.length) return toast("Write something or add media");
   const btn = document.getElementById("pc-btn");
   btn.disabled = true; btn.textContent = "Posting...";
   const fd = new FormData();
@@ -604,10 +651,11 @@ async function submitPost() {
   fd.append("mood", document.getElementById("pc-mood").value);
   fd.append("music", document.getElementById("pc-music").value.trim());
   state.pc.files.forEach((f) => fd.append("media", f));
+  if (links.length) fd.append("links", JSON.stringify(links));
   fd.append("track_titles", JSON.stringify(state.pc.files.filter((f) => f._audio).map((f) => f._title || "")));
   try {
     await apiUpload("/posts", fd, (pct) => { btn.textContent = pct < 100 ? `Uploading ${pct}%...` : "Saving..."; });
-    state.pc.files = [];
+    state.pc.files = []; state.pc.links = [];
     toast("Posted!", true);
     await Promise.all([loadPosts(true), loadRecent()]); render();
   } finally { btn.disabled = false; btn.textContent = "Post Entry"; }
@@ -658,10 +706,7 @@ function renderActingTop() {
       <div class="embed"><div class="video-embed"><iframe src="https://www.youtube.com/embed/${ACTING.reel}" title="${esc(ACTING.reelTitle)}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div></div>
       <div class="entry-foot"><a href="https://www.youtube.com/watch?v=${ACTING.reel}" target="_blank" rel="noopener">watch on YouTube</a></div>
     </div>
-    <a class="entry imdb-card" href="${ACTING.imdb}" target="_blank" rel="noopener">
-      <span class="imdb-tag">${pix("acting")} IMDb</span>
-      <span><b>Josh on IMDb</b><br><span class="muted">Full credits and profile »</span></span>
-    </a>`;
+    <div class="entry link-entry">${linkCard(ACTING.imdb, "Josh on IMDb", "Full credits and profile")}</div>`;
 }
 
 function renderFeed() {
@@ -799,7 +844,7 @@ function renderPost(p, full = false, pin = null) {
     ${title}
     ${p.body && !(/^https?:\/\/\S+$/.test(p.body.trim()) && embedHtml(p.body.trim())) ? `<div class="entry-body">${linkify(p.body)}</div>` : ""}
     ${audio.length ? renderPlayer(p, audio, pics[0]) : media.length ? renderAlbum(p, media) : ""}
-    ${downloadButton(p)}${embed}
+    ${downloadButton(p)}${embed}${renderLinks(p)}
     ${mood || music ? `<div class="meta">${mood}${music}</div>` : ""}
     <div class="entry-foot">posted by <b>Josh</b> @ <a href="#/post/${p.id}">${esc(fmtTime(p.created_at))}</a>
       | <button class="like-btn ${p.liked ? "liked" : ""}" onclick="likePost(${p.id}, this)" aria-label="Like">${heart}<span class="n">${p.like_count || 0}</span></button>
@@ -1611,10 +1656,10 @@ async function modViewChat(id) {
 async function modRemoveMsg(id, chatId) { await api(`/mod/messages/${id}/remove`, { method: "POST" }); await modViewChat(chatId); }
 
 // ---------------------------------------------------------------------------
-// Cursor sparkle trail (desktop mouse only, can be switched off in the footer)
+// Cursor sparkle trail (desktop mouse only). On for everyone; visitors can switch it off in the footer.
 // ---------------------------------------------------------------------------
-function sparklesOn() { return safeGet("sparkles") === "on"; }
-function toggleSparkles() { safeSet("sparkles", sparklesOn() ? "off" : "on"); render(); }
+function sparklesOn() { return safeGet("trail") !== "off"; }
+function toggleSparkles() { safeSet("trail", sparklesOn() ? "off" : "on"); render(); }
 (function sparkleTrail() {
   if (!window.matchMedia?.("(pointer: fine)").matches) return;
   let last = 0, alive = 0;

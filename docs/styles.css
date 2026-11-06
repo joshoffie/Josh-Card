@@ -49,7 +49,7 @@ ul { list-style: none; }
 .pix-settings { background-image: url(img/i-settings.png); } .pix-mod { background-image: url(img/i-mod.png); }
 .pix-rules { background-image: url(img/i-rules.png); } .pix-card { background-image: url(img/i-card.png); }
 .pix-logout { background-image: url(img/i-logout.png); } .pix-login { background-image: url(img/i-login.png); }
-.pix-old { background-image: url(img/i-old.png); } .pix-acting { background-image: url(img/i-acting.png); } .pix-pin { background-image: url(img/i-pin.png); }
+.pix-old { background-image: url(img/i-old.png); } .pix-acting { background-image: url(img/i-acting.png); } .pix-link { background-image: url(img/i-link.png); } .pix-pin { background-image: url(img/i-pin.png); }
 a:hover .pix, button:hover .pix, label:hover .pix, .tab.on .pix, .lb.on .pix { animation: pix4 0.6s steps(4) infinite; }
 @keyframes pix4 { from { background-position: 0 0; } to { background-position: -64px 0; } }
 .sprite-still { width: 16px; height: 16px; object-fit: none; object-position: 0 0; image-rendering: pixelated; vertical-align: -3px; }
@@ -135,10 +135,18 @@ a:hover .pix, button:hover .pix, label:hover .pix, .tab.on .pix, .lb.on .pix { a
 .pinned-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .pinned-grid .entry { margin-bottom: 0; }
 .pinned .ap-pin { display: none; }
-.imdb-card { display: flex; align-items: center; gap: 12px; color: var(--text); text-decoration: none; }
-.imdb-card:hover { border-color: var(--accent); color: #ffffff; }
-.imdb-card:hover .imdb-tag { transform: rotate(-4deg) scale(1.08); }
-.imdb-tag { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: #333366; color: #ffffff; font: 10px/1 "Silkscreen", monospace; letter-spacing: 1px; border: 2px outset #6666cc; transition: transform .1s steps(2); }
+/* Link cards: the IMDb card on Acting and links Josh adds to posts */
+.link-cards { display: grid; gap: 8px; margin: 10px 0 4px; }
+.link-entry { padding: 0; }
+.link-card { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: #000033; border: 1px solid var(--line); color: var(--text); text-decoration: none; }
+.link-entry .link-card { border: 0; background: transparent; padding: 12px 14px; }
+.link-card:hover { border-color: var(--accent); color: #ffffff; background: #000066; text-decoration: none; }
+.link-card:hover .link-tag { transform: rotate(-4deg) scale(1.08); }
+.link-tag { flex: none; display: flex; align-items: center; gap: 6px; max-width: 45%; padding: 6px 10px; background: #333366; color: #ffffff; font: 10px/1 "Silkscreen", monospace; letter-spacing: 1px; text-transform: uppercase; border: 2px outset #6666cc; transition: transform .1s steps(2); overflow: hidden; white-space: nowrap; }
+.link-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.link-text b, .link-text .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#pc-links .le { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+#pc-links .le-url { flex: 3; min-width: 0; } #pc-links .le-label { flex: 2; min-width: 0; }
 .pin-label { margin: -12px -14px 10px; padding: 3px 8px; font: 8px/13px "Silkscreen", monospace; letter-spacing: 1px; text-transform: uppercase; }
 .pin-a { border: 2px solid var(--accent); }
 .pin-a .pin-label { background: var(--accent); color: #000000; font-size: 16px; line-height: 22px; }
@@ -486,7 +494,7 @@ a:hover .av, .av:hover { animation: frame 0.5s steps(1) infinite; }
 .yt-name { color: #fff; font: bold 14px var(--head); }
 .yt-head .row { flex-wrap: wrap; }
 
-/* Cursor trail (off unless switched on in the footer) */
+/* Cursor trail (on by default; the footer link switches it off) */
 .trail { position: absolute; z-index: 300; pointer-events: none; image-rendering: pixelated; animation: fall 0.8s steps(4) forwards; }
 @keyframes fall { to { transform: translateY(14px); opacity: 0; } }
 

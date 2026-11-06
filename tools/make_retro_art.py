@@ -496,11 +496,37 @@ def icon_clapper():
     return frames
 
 
+
+def icon_link():
+    """Links: two chain links that pull apart and snap back on hover."""
+    def ring(x0, y0, x1, y1):
+        return [(x, y0) for x in range(x0 + 1, x1)] + [(x, y1) for x in range(x0 + 1, x1)] \
+            + [(x0, y) for y in range(y0 + 1, y1)] + [(x1, y) for y in range(y0 + 1, y1)]
+    frames = []
+    for gap in (0, 1, 2, 1):
+        im = canvas()
+        left = ring(0 - gap, 4, 8 - gap, 11)
+        right = ring(6 + gap, 4, 14 + gap, 11)
+        for (x, y) in left + right:
+            px(im, x + 1, y + 1, "k")
+        # interlocked: the right link crosses over the left one at the top, under it at the bottom
+        for (x, y) in right:
+            if y < 8: px(im, x, y, "S")
+        for (x, y) in left:
+            px(im, x, y, "w")
+        for (x, y) in right:
+            if y >= 8 and not any(p == (x, y) for p in left): px(im, x, y, "S")
+        for (x, y) in right:
+            if y < 8: px(im, x, y, "S")
+        frames.append(im)
+    return frames
+
+
 ICONS = {
     "feed": icon_home, "software": icon_computer, "art": icon_palette, "music": icon_notes,
     "youtube": icon_tv, "chats": icon_mail, "friends": icon_people, "profile": icon_smiley_wink,
     "settings": icon_gear, "mod": icon_shield, "rules": icon_book, "card": icon_card,
-    "logout": icon_door, "login": icon_key, "old": icon_cassette, "pin": icon_pin, "acting": icon_clapper,
+    "logout": icon_door, "login": icon_key, "old": icon_cassette, "pin": icon_pin, "acting": icon_clapper, "link": icon_link,
 }
 
 

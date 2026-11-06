@@ -120,6 +120,8 @@ try { db.exec("ALTER TABLE posts ADD COLUMN music TEXT DEFAULT ''"); } catch(e) 
 try { db.exec("ALTER TABLE posts ADD COLUMN tracks TEXT DEFAULT ''"); } catch(e) {}
 // Pinned ("sticky") posts stay at the top of their tab
 try { db.exec("ALTER TABLE posts ADD COLUMN pinned_at TEXT"); } catch(e) {}
+// Link cards on a post, as a JSON array of { url, label }
+try { db.exec("ALTER TABLE posts ADD COLUMN links TEXT DEFAULT ''"); } catch(e) {}
 
 // ---------------------------------------------------------------------------
 // Auth token — deterministic HMAC of the serial, no storage needed
@@ -240,13 +242,31 @@ export const CATEGORIES = ["software", "art", "music", "acting", "old"];
 export const MOODS = ["happy", "excited", "chill", "creative", "sleepy", "hungry", "sad", "annoyed", "loved",
   "cool", "accomplished", "nostalgic", "silly", "thoughtful", "busy"];
 
-export function createPost(postType, title, body, mediaUrl, category = "", { mood = "", music = "", tracks = [] } = {}) {
+// Web links Josh attaches to a post. Adds https:// when it's missing; up to 5 per post.
+export function cleanLinks(list) {
+  const out = [];
+  for (const l of [].concat(list || [])) {
+    let url = String(l?.url || "").trim();
+    if (!url) continue;
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = "https://" + url;
+    let u;
+    try { u = new URL(url); } catch { u = null; }
+    if (!u || !/^https?:$/.test(u.protocol) || !u.hostname.includes(".")) throw new Error(`"${String(l.url).slice(0, 60)}" isn't a web link`);
+    if (u.href.length > 600) throw new Error("That link is too long");
+    out.push({ url: u.href, label: String(l?.label || "").trim().slice(0, 80) });
+  }
+  if (out.length > 5) throw new Error("Up to 5 links per post");
+  return out;
+}
+
+export function createPost(postType, title, body, mediaUrl, category = "", { mood = "", music = "", tracks = [], links = [] } = {}) {
   if (category && !CATEGORIES.includes(category)) throw new Error("Invalid category");
   if (mood && !MOODS.includes(mood)) throw new Error("Invalid mood");
   music = String(music || "").trim().slice(0, 120);
   const info = insertPost.run(postType, title, body, mediaUrl || "", category || "");
   if (mood || music) db.prepare("UPDATE posts SET mood = ?, music = ? WHERE id = ?").run(mood || "", music, info.lastInsertRowid);
   if (tracks.length) db.prepare("UPDATE posts SET tracks = ? WHERE id = ?").run(JSON.stringify(tracks), info.lastInsertRowid);
+  if (links.length) db.prepare("UPDATE posts SET links = ? WHERE id = ?").run(JSON.stringify(links), info.lastInsertRowid);
   return getPost.get(info.lastInsertRowid);
 }
 

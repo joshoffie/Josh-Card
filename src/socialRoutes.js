@@ -10,7 +10,7 @@ import { v2 as cloudinary } from "cloudinary";
 import { randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createPost, removePost, CATEGORIES, MOODS } from "./store.js";
+import { createPost, removePost, cleanLinks, CATEGORIES, MOODS } from "./store.js";
 import * as S from "./social.js";
 import * as C from "./community.js";
 import * as Chat from "./chat.js";
@@ -274,7 +274,13 @@ router.post("/posts", requireAdmin, adminUpload.array("media", 10), wrap(async (
       }
     }
   }
-  if (!body && !title && !files.length && !linked.length) throw new Error("Write something or add a photo, video or song");
+  let links = [];
+  if (req.body.links) {
+    let raw;
+    try { raw = JSON.parse(req.body.links); } catch { throw new Error("Couldn't read the links"); }
+    links = cleanLinks(raw);
+  }
+  if (!body && !title && !files.length && !linked.length && !links.length) throw new Error("Write something or add a photo, video, song or link");
   // Sort the uploads: pictures, videos and music. Music posts take up to 10 tracks and one cover picture.
   const kinds = files.map((f) => {
     const image = sniffImage(f.buffer);
@@ -312,7 +318,7 @@ router.post("/posts", requireAdmin, adminUpload.array("media", 10), wrap(async (
   const type = audioCount ? "audio" : !urls.length ? "text" : hasVideo && urls.length === 1 ? "video" : "image";
   const mediaUrl = urls.length === 1 ? urls[0] : urls.length ? JSON.stringify(urls) : "";
   const post = createPost(type, title, body, mediaUrl, category || (audioCount ? "music" : ""),
-    { mood: String(req.body.mood || ""), music: req.body.music, tracks });
+    { mood: String(req.body.mood || ""), music: req.body.music, tracks, links });
   res.status(201).json(C.getPost(post.id, req.user.id));
 }));
 
