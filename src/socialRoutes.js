@@ -17,7 +17,7 @@ import * as Chat from "./chat.js";
 import * as YouTube from "./youtube.js";
 import * as Hits from "./hits.js";
 import * as Safety from "./safety.js";
-import { checkText, checkImage, sniffImage, validGifUrl, aiModerationEnabled } from "./moderation.js";
+import { checkText, checkImage, sniffImage, sniffAudio, validGifUrl, aiModerationEnabled } from "./moderation.js";
 import { limit, clientIp, hit } from "./ratelimit.js";
 import { savePending, signPending, publish, discard, isPendingPath, PUBLIC_DIR } from "./media.js";
 
@@ -94,7 +94,7 @@ async function storeMedia(buffer, { mime, folder, resourceType = "image" }) {
     });
     return { path: `/media/${result.resource_type}/upload/v${result.version}/${result.public_id}.${result.format}`, url: result.secure_url };
   }
-  if (resourceType !== "image") throw new Error("Video uploads need Cloudinary configured");
+  if (resourceType !== "image") throw new Error("Video and music uploads need Cloudinary configured");
   const name = `${randomBytes(12).toString("hex")}.${EXT[mime] || "bin"}`;
   writeFileSync(resolve(PUBLIC_DIR, name), buffer);
   return { path: `/media/local/${name}`, url: `/media/local/${name}` };
@@ -170,7 +170,7 @@ router.get("/config", (req, res) => {
     categories: CATEGORIES,
     moods: MOODS,
     // Public "About Me" box in the sidebar
-    about: josh ? { username: josh.username, display_name: josh.display_name, bio: josh.bio, avatar_url: josh.avatar_url, created_at: josh.created_at } : null,
+    about: josh ? { id: josh.id, username: josh.username, display_name: josh.display_name, bio: josh.bio, avatar_url: josh.avatar_url, created_at: josh.created_at } : null,
     gif_search: !!process.env.GIPHY_API_KEY,
     report_reasons: Safety.REPORT_REASONS,
     points: C.POINTS,
@@ -265,20 +265,45 @@ router.post("/posts", requireAdmin, adminUpload.array("media", 10), wrap(async (
       }
     }
   }
-  if (!body && !title && !files.length && !linked.length) throw new Error("Write something or add a photo/video");
+  if (!body && !title && !files.length && !linked.length) throw new Error("Write something or add a photo, video or song");
+  // Sort the uploads: pictures, videos and music. Music posts take up to 10 tracks and one cover picture.
+  const kinds = files.map((f) => {
+    const image = sniffImage(f.buffer);
+    if (image) return { f, kind: "image", mime: image };
+    const audio = sniffAudio(f.buffer, f.mimetype);
+    if (audio) return { f, kind: "audio", ext: audio };
+    if (f.mimetype.startsWith("video/")) return { f, kind: "video", mime: f.mimetype };
+    throw new Error(`${f.originalname}: unsupported file type`);
+  });
+  const audioCount = kinds.filter((k) => k.kind === "audio").length;
+  if (audioCount) {
+    if (kinds.some((k) => k.kind === "video")) throw new Error("A music post can't also have videos");
+    if (kinds.filter((k) => k.kind === "image").length + linked.length > 1) throw new Error("A music post can have one cover picture");
+  }
+  let titles = [];
+  try { titles = JSON.parse(req.body.track_titles || "[]"); } catch { titles = []; }
+  const tracks = [];
   const urls = [...linked];
   let hasVideo = false;
-  for (const f of files) {
-    const isVideo = f.mimetype.startsWith("video/");
-    const mime = isVideo ? f.mimetype : sniffImage(f.buffer);
-    if (!isVideo && !mime) throw new Error(`${f.originalname}: unsupported file type`);
-    hasVideo ||= isVideo;
-    const stored = await storeMedia(f.buffer, { mime, folder: "josh-blog", resourceType: isVideo ? "video" : "image" });
+  // Cover first, then the tracks in the order they were picked
+  for (const k of [...kinds.filter((k) => k.kind !== "audio"), ...kinds.filter((k) => k.kind === "audio")]) {
+    if (k.kind === "audio") {
+      const stored = await storeMedia(k.f.buffer, { mime: "audio/" + k.ext, folder: "josh-blog-music", resourceType: "video" });
+      // Cloudinary converts on request: stream lossless/odd formats as MP3 so every browser can play them
+      urls.push(["mp3", "m4a", "aac"].includes(k.ext) ? stored.url : stored.url.replace(/\.\w+$/, ".mp3"));
+      const i = tracks.length;
+      const fallback = String(k.f.originalname || `Track ${i + 1}`).replace(/\.[^.]+$/, "");
+      tracks.push(String(titles[i] || fallback).trim().slice(0, 120) || `Track ${i + 1}`);
+      continue;
+    }
+    hasVideo ||= k.kind === "video";
+    const stored = await storeMedia(k.f.buffer, { mime: k.mime, folder: "josh-blog", resourceType: k.kind });
     urls.push(stored.url);
   }
-  const type = !urls.length ? "text" : hasVideo && urls.length === 1 ? "video" : "image";
+  const type = audioCount ? "audio" : !urls.length ? "text" : hasVideo && urls.length === 1 ? "video" : "image";
   const mediaUrl = urls.length === 1 ? urls[0] : urls.length ? JSON.stringify(urls) : "";
-  const post = createPost(type, title, body, mediaUrl, category, { mood: String(req.body.mood || ""), music: req.body.music });
+  const post = createPost(type, title, body, mediaUrl, category || (audioCount ? "music" : ""),
+    { mood: String(req.body.mood || ""), music: req.body.music, tracks });
   res.status(201).json(C.getPost(post.id, req.user.id));
 }));
 
@@ -370,6 +395,7 @@ router.get("/users/:username", requireAuth, wrap(async (req, res) => {
     is_admin: S.isAdmin(profile),
     badge: C.accountAgeBadge(profile.created_at),
     friend_status: friendStatus,
+    can_message: friendStatus !== "self" && profile.status !== "banned" && Chat.canDM(req.user.id, profile.id),
     request_id: friendStatus === "pending" ? S.getIncomingRequestId(req.user.id, profile.id) : null,
     comment_count: C.commentCount(profile.id),
     friends_count: S.getFriends(profile.id).length,

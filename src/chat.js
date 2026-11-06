@@ -3,7 +3,7 @@
 // Adding people to a DM starts a NEW group (the 1-on-1 history stays private).
 // ---------------------------------------------------------------------------
 import { db } from "./store.js";
-import { areFriends, getProfileById, addColumn } from "./social.js";
+import { areFriends, getProfileById, addColumn, isAdmin } from "./social.js";
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, ran_at TEXT DEFAULT (datetime('now')));
@@ -128,11 +128,16 @@ export function unreadChatCount(userId) {
     WHERE x.id > MAX(m.last_read_id, m.start_id) AND x.status = 'visible' AND x.kind = 'text' AND x.sender_id != ?`).get(userId, userId).n;
 }
 
+/** 1-on-1 chats are between friends, except that anyone can message Josh (and Josh can message anyone). */
+export function canDM(userId, otherId) {
+  return areFriends(userId, otherId) || isAdmin(getProfileById(userId)) || isAdmin(getProfileById(otherId));
+}
+
 export function getOrCreateDM(userId, otherId) {
   if (userId === otherId) throw new Error("You can't message yourself");
   const other = getProfileById(otherId);
   if (!other || other.status === "banned") throw new Error("User not found");
-  if (!areFriends(userId, otherId)) throw new Error("You can only message friends. Send a friend request first.");
+  if (!canDM(userId, otherId)) throw new Error("You can only message friends (and Josh). Send a friend request first.");
   const key = dmKey(userId, otherId);
   let conv = db.prepare("SELECT * FROM conversations WHERE dm_key = ?").get(key);
   if (!conv) {
@@ -161,7 +166,7 @@ export function getChat(convId, userId, { afterId = 0 } = {}) {
   let canSend = true, reason = "";
   if (!conv.is_group) {
     const other = mem.find((m) => m.id !== userId);
-    if (!other || !areFriends(userId, other.id)) { canSend = false; reason = "You're no longer friends, so this chat is read-only."; }
+    if (!other || !canDM(userId, other.id)) { canSend = false; reason = "You're no longer friends, so this chat is read-only."; }
   }
   return { id: conv.id, is_group: !!conv.is_group, name: conv.name, members: mem, messages: msgs, can_send: canSend, read_only_reason: reason };
 }
@@ -174,7 +179,7 @@ export function sendChatMessage(convId, userId, { body = "", gifUrl = "", flags 
   if (body.length > 2000) throw new Error("Message must be 2,000 characters or fewer");
   if (!conv.is_group) {
     const other = members(convId).find((m) => m.id !== userId);
-    if (!other || !areFriends(userId, other.id)) throw new Error("You're no longer friends, so you can't send messages here.");
+    if (!other || !canDM(userId, other.id)) throw new Error("You're no longer friends, so you can't send messages here.");
   }
   const info = db.prepare("INSERT INTO chat_messages (conversation_id, sender_id, body, gif_url, flags) VALUES (?, ?, ?, ?, ?)")
     .run(convId, userId, body, gifUrl || "", flags.join(","));

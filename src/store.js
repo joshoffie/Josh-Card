@@ -116,6 +116,8 @@ try { db.exec("ALTER TABLE posts ADD COLUMN hidden INTEGER DEFAULT 0"); } catch(
 // LiveJournal-style "current mood" / "current music" lines on Josh's posts
 try { db.exec("ALTER TABLE posts ADD COLUMN mood TEXT DEFAULT ''"); } catch(e) {}
 try { db.exec("ALTER TABLE posts ADD COLUMN music TEXT DEFAULT ''"); } catch(e) {}
+// Titles of uploaded music tracks, as a JSON array in the same order as the audio files in media_url
+try { db.exec("ALTER TABLE posts ADD COLUMN tracks TEXT DEFAULT ''"); } catch(e) {}
 
 // ---------------------------------------------------------------------------
 // Auth token — deterministic HMAC of the serial, no storage needed
@@ -236,12 +238,13 @@ export const CATEGORIES = ["software", "art", "music"];
 export const MOODS = ["happy", "excited", "chill", "creative", "sleepy", "hungry", "sad", "annoyed", "loved",
   "cool", "accomplished", "nostalgic", "silly", "thoughtful", "busy"];
 
-export function createPost(postType, title, body, mediaUrl, category = "", { mood = "", music = "" } = {}) {
+export function createPost(postType, title, body, mediaUrl, category = "", { mood = "", music = "", tracks = [] } = {}) {
   if (category && !CATEGORIES.includes(category)) throw new Error("Invalid category");
   if (mood && !MOODS.includes(mood)) throw new Error("Invalid mood");
   music = String(music || "").trim().slice(0, 120);
   const info = insertPost.run(postType, title, body, mediaUrl || "", category || "");
   if (mood || music) db.prepare("UPDATE posts SET mood = ?, music = ? WHERE id = ?").run(mood || "", music, info.lastInsertRowid);
+  if (tracks.length) db.prepare("UPDATE posts SET tracks = ? WHERE id = ?").run(JSON.stringify(tracks), info.lastInsertRowid);
   return getPost.get(info.lastInsertRowid);
 }
 

@@ -80,20 +80,44 @@ def text_w(s, font=FONT):
     return b[2] - b[0]
 
 
+BAYER4 = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
+
+
+def websafe(im, dither=False):
+    """Snap every pixel to the 216-color web-safe palette (channels in steps of 0x33),
+    the colors a 2003 site could count on. Optional ordered dithering for gradients."""
+    im = im.convert("RGBA")
+    px_ = im.load()
+    for y in range(im.height):
+        for x in range(im.width):
+            r, g, b, a = px_[x, y]
+            if a < 128:
+                px_[x, y] = (0, 0, 0, 0)
+                continue
+            out = []
+            for v in (r, g, b):
+                lo = (v // 51) * 51
+                frac = (v - lo) / 51
+                t = (BAYER4[y % 4][x % 4] + 0.5) / 16 if dither else 0.5
+                out.append(min(255, lo + 51) if frac > t and lo < 255 else lo)
+            px_[x, y] = (out[0], out[1], out[2], 255)
+    return im
+
+
 def sheet(frames, name):
     """Frames side by side, for CSS steps() hover animations."""
     w, h = frames[0].size
     s = canvas(w * len(frames), h)
     for i, f in enumerate(frames):
         s.paste(f, (i * w, 0))
-    s.save(os.path.join(OUT, name))
+    websafe(s).save(os.path.join(OUT, name))
 
 
 def gif(frames, name, ms=150, loop=0):
     """Animated GIF with 1-bit transparency, like the real thing."""
     pal_frames = []
     for f in frames:
-        f = f.convert("RGBA")
+        f = websafe(f)
         alpha = f.getchannel("A")
         p = f.convert("RGB").convert("P", palette=Image.ADAPTIVE, colors=255)
         mask = Image.eval(alpha, lambda a: 255 if a < 128 else 0)
@@ -430,7 +454,7 @@ def sparkle_frames(size=9, color="g"):
 
 def new_badge():
     frames = []
-    cols = ["r", "o", "r", "R"]
+    cols = ["r", "R", "r", "m"]
     w = text_w("NEW!", FONT) + 6
     for f in range(4):
         im = canvas(w, 11)
@@ -460,7 +484,7 @@ THUMB = [
 def props():
     """Thumbs up: [not given, hover, given, given+hover]."""
     out = []
-    for fill, dy, shine in [("g", 1, False), ("w", 0, False), ("o", 1, True), ("y", 0, True)]:
+    for fill, dy, shine in [("g", 1, False), ("w", 0, False), ("c", 1, True), ("S", 0, True)]:
         im = canvas(11, 12)
         art(im, 0, dy, [r.replace("x", fill) for r in THUMB])
         if shine:
@@ -512,22 +536,22 @@ def envelope_alert():
 def bg_tile():
     """64x64 dark tile: faint grid and a few slow-blinking stars."""
     frames = []
-    base = (12, 14, 20)
+    base = (0, 0, 0)
     rnd = random.Random(42)
     stars = [(rnd.randrange(64), rnd.randrange(64), rnd.randrange(4)) for _ in range(5)]
     dust = [(rnd.randrange(64), rnd.randrange(64)) for _ in range(12)]
     for f in range(4):
         im = canvas(64, 64, base + (255,))
         for i in range(64):
-            px(im, i, 0, (18, 21, 30)); px(im, 0, i, (18, 21, 30))
+            px(im, i, 0, (0, 0, 51)); px(im, 0, i, (0, 0, 51))
         for (x, y) in dust:
-            px(im, x, y, (34, 38, 52))
+            px(im, x, y, (51, 51, 102))
         for (x, y, phase) in stars:
             s_ = (f + phase) % 4
-            px(im, x, y, (150, 156, 175) if s_ != 2 else (235, 235, 235))
+            px(im, x, y, (153, 153, 204) if s_ != 2 else (255, 255, 255))
             if s_ == 2:
                 for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-                    px(im, x + dx, y + dy, (70, 76, 96))
+                    px(im, x + dx, y + dy, (51, 51, 153))
         frames.append(im)
     return frames
 
@@ -664,7 +688,7 @@ MOODS = ["happy", "excited", "chill", "creative", "sleepy", "hungry", "sad", "an
 # ---------------------------------------------------------------------------
 PIX_STAR = ["..y..", "..y..", "yyyyy", ".yyy.", ".y.y."]
 PIX_BOLT = ["...yy", "..yy.", ".yyyy", "..yy.", ".yy.."]
-PIX_ARROW = ["o....", "oo...", "ooo..", "oo...", "o...."]
+PIX_ARROW = ["c....", "cc...", "ccc..", "cc...", "c...."]
 
 
 def blinkie(name, parts, schemes, ms=220):
@@ -699,7 +723,7 @@ def button88(name, draw, frames_n=1, ms=300):
             px(im, x, 1, (255, 255, 255)) if False else None
         frames.append(im)
     if frames_n == 1:
-        frames[0].convert("RGB").save(os.path.join(OUT, name.replace(".gif", ".gif")), "GIF")
+        websafe(frames[0]).convert("RGB").save(os.path.join(OUT, name), "GIF")
     else:
         gif(frames, name, ms)
 
@@ -716,7 +740,7 @@ def vgrad(im, x0, y0, x1, y1, c0, c1, steps=6):
 def btn_blog(im, f):
     vgrad(im, 1, 1, 86, 29, (10, 10, 10), (70, 70, 80))
     text_at(im, 6, 5, "JOSH'S", (200, 200, 200), FONT_B)
-    text_at(im, 6, 15, "BLOG", "o", FONT_2X)
+    text_at(im, 6, 15, "BLOG", "c", FONT_2X)
     for i, (x, y) in enumerate([(70, 7), (79, 16), (66, 21)]):
         if (f + i) % 3 == 0:
             for d in (-2, -1, 0, 1, 2):
@@ -766,7 +790,7 @@ def under_construction():
         rect(im, 0, 6, 87, 24, "y")
         text_at(im, 5, 8, "UNDER", "k", FONT_B)
         text_at(im, 9, 17, "CONSTRUCTION", "k", FONT)
-        lamp = "r" if f == 1 else "o"
+        lamp = "r" if f == 1 else "y"
         rect(im, 71, 7, 79, 15, "k"); rect(im, 72, 8, 78, 14, lamp)
         if f == 1:
             for (x, y) in [(75, 6), (70, 11), (80, 11)]:
@@ -780,7 +804,7 @@ def header_banner():
     """960x150: dithered night sky over a pixel city skyline with lit windows."""
     W, H = 960, 150
     im = Image.new("RGB", (W, H))
-    top, bot = (6, 8, 18), (44, 58, 92)
+    top, bot = (0, 0, 10), (40, 60, 110)
     bayer = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
     levels = 6
     pal = [tuple(int(top[i] + (bot[i] - top[i]) * k / (levels - 1)) for i in range(3)) for k in range(levels)]
@@ -838,21 +862,28 @@ def header_banner():
             x += bw + r2.randrange(0, 4)
     skyline(11, H + 2, 40, 95, (20, 24, 36), (120, 100, 50), 0.22)
     skyline(29, H + 2, 18, 62, (8, 9, 14), (255, 190, 80), 0.32)
-    im.save(os.path.join(OUT, "header.png"), optimize=True)
+    websafe(im, dither=True).convert("RGB").save(os.path.join(OUT, "header.png"), optimize=True)
+
+
+def dither_tile():
+    im = canvas(2, 2)
+    px(im, 0, 0, "k"); px(im, 1, 1, "k")
+    return im
 
 
 def favicon():
     im = canvas(32, 32, (14, 14, 16, 255))
     box(im, 0, 0, 31, 31, (90, 90, 100))
-    text(im, 9, 5, "J", "o", FONT_2X)
+    text(im, 9, 5, "J", "c", FONT_2X)
     for (x, y) in [(24, 6), (6, 24)]:
         for d in (-2, -1, 0, 1, 2):
             px(im, x + d, y, "w"); px(im, x, y + d, "w")
-    im.save(os.path.join(OUT, "favicon.png"))
+    websafe(im).save(os.path.join(OUT, "favicon.png"))
 
 
 def main():
     sheet(props(), "props.png")
+    gif([dither_tile()], "dither.gif")
     gif(scanner_bar(), "scanner.gif", 40)
     for name, fn in ICONS.items():
         sheet(fn(), f"i-{name}.png")
@@ -863,14 +894,14 @@ def main():
     gif(envelope_alert(), "mail.gif", 260)
     gif(bg_tile(), "bg-stars.gif", 400)
     sheet(star_bullet(), "star.png")
-    user_icon().save(os.path.join(OUT, "user.gif"))
+    gif([user_icon()], "user.gif")
     for m in MOODS:
-        mood_face(m).save(os.path.join(OUT, f"mood-{m}.gif"))
+        gif([mood_face(m)], f"mood-{m}.gif")
     dark, dark2 = (16, 16, 16), (28, 28, 28)
     blinkie("blinkie-blog.gif", [PIX_ARROW, "JOSH'S BLOG", PIX_ARROW],
-            [(dark, "o", "o"), (dark2, "y", "y")], 400)
+            [(dark, "c", "c"), (dark2, "S", "w")], 400)
     blinkie("blinkie-sam.gif", ["SOFTWARE", PIX_STAR, "ART", PIX_STAR, "MUSIC"],
-            [(dark, "c", "c"), (dark, "o", "o"), (dark, "l", "l")], 300)
+            [(dark, "c", "c"), (dark, "y", "y"), (dark, "l", "l")], 300)
     blinkie("blinkie-comments.gif", [PIX_ARROW, "SAY SOMETHING", PIX_ARROW],
             [(dark, "l", "l"), (dark2, "L", "w")], 450)
     blinkie("blinkie-noads.gif", ["NO ADS", PIX_BOLT, "NO POP-UPS"],

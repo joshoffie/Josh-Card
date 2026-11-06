@@ -99,7 +99,7 @@ function badgeHtml(label) {
   if (label === "New") return ap("NEW", "MEMBER", "ap-new");
   return ap(label.replace(" years", " YRS").replace(" year", " YR").replace(" months", " MO").replace(" month", " MO").replace(" week", " WK").toUpperCase(), "MEMBER", "ap-age");
 }
-const joshBadge = () => ap("JOSH", "ADMIN", "ap-josh");
+const joshBadge = () => ap("BLOG", "AUTHOR", "ap-josh");
 const pts = (n) => `<span class="pts">★ ${n || 0} pts</span>`;
 function initial(n) { return (String(n || "?").trim()[0] || "?").toUpperCase(); }
 const AV_COLORS = ["#ff66cc", "#6699ff", "#33cc99", "#ff9933", "#9966ff", "#33ccff", "#ff6666", "#99cc33"];
@@ -171,6 +171,23 @@ async function api(path, { method = "GET", body, form } = {}) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error(data.error || "Request failed"), { status: res.status, code: data.code });
   return data;
+}
+
+// Same as api() for form uploads, but reports progress (big music files take a while)
+function apiUpload(path, form, onProgress) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open("POST", API + "/api/social" + path);
+    if (state.token) x.setRequestHeader("Authorization", "Bearer " + state.token);
+    x.upload.onprogress = (e) => { if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100)); };
+    x.onload = () => {
+      let data = {}; try { data = JSON.parse(x.responseText); } catch {}
+      if (x.status >= 200 && x.status < 300) resolve(data);
+      else reject(Object.assign(new Error(data.error || "Upload failed"), { status: x.status, code: data.code }));
+    };
+    x.onerror = () => reject(new Error("Upload failed — check your connection"));
+    x.send(form);
+  });
 }
 
 function logoutLocal() {
@@ -361,7 +378,8 @@ function renderSide() {
     <div class="about">${joshPic("lg")}
       <div><b>${esc(about?.display_name || "Josh Hoffman")}</b>
       ${about?.bio ? `<p>${esc(about.bio)}</p>` : ""}</div></div>
-    <a class="more" href="#/u/${esc(about?.username || "josh")}" onclick="return !needAccount('see profiles')">View my complete profile »</a>`);
+    <a class="more" href="#/u/${esc(about?.username || "josh")}" onclick="return !needAccount('see profiles')">View my complete profile »</a>
+    ${about?.id && state.me?.id !== about.id ? `<a class="more" href="javascript:void(0)" onclick="messageJosh()">${pix("chats")} Send me a message »</a>` : ""}`);
   const memberBox = me
     ? sideBox("Member Area", `<div class="about">${avatar(me, "md")}<div><b>${esc(me.display_name || me.username)}</b><br>
         <span class="muted">@${esc(me.username)}</span><br>${me.is_admin ? joshBadge() : badgeHtml(ageBadge(me.created_at))}<br>${pts(me.points)}</div></div>
@@ -476,7 +494,7 @@ function embedHtml(url) {
     return `<div class="embed"><div class="video-embed"><iframe src="https://www.youtube.com/embed/${esc(m[1])}" allowfullscreen loading="lazy"></iframe></div></div>`;
   }
   if (/^https:\/\/(?:www\.|m\.)?soundcloud\.com\//.test(url)) {
-    return `<div class="embed"><iframe height="166" scrolling="no" loading="lazy" src="https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&color=%23ff3399&auto_play=false&show_comments=false"></iframe></div>`;
+    return `<div class="embed"><iframe height="166" scrolling="no" loading="lazy" src="https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&color=%233399ff&auto_play=false&show_comments=false"></iframe></div>`;
   }
   return "";
 }
@@ -520,6 +538,8 @@ function renderComposer() {
     <div class="composer-bar">
       <label class="btn">${pix("art")} Add photos / videos
         <input type="file" id="pc-files" accept="image/*,video/*" multiple style="display:none" onchange="addPostFiles(this)"></label>
+      <label class="btn">${pix("music")} Add music
+        <input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.aif,.aiff" multiple style="display:none" onchange="addPostFiles(this)"></label>
       <span style="flex:1"></span>
       <button class="btn btn-primary" id="pc-btn" onclick="submitPost()">Post Entry</button>
     </div></fieldset>`;
@@ -529,17 +549,32 @@ function moodPreview(sel) {
   if (!sel.value) { img.style.visibility = "hidden"; return; }
   img.src = `img/mood-${sel.value}.gif`; img.style.visibility = "visible";
 }
+const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg|oga|flac|aif|aiff)$/i;
+const isAudioFile = (f) => f.type.startsWith("audio/") || AUDIO_EXT.test(f.name);
 function renderThumbs() {
-  return state.pc.files.map((f, i) => `<div class="t">${f.type.startsWith("image/") ? `<img src="${f._url}" alt="">` : "Video"}
+  const files = state.pc.files;
+  const pics = files.map((f, i) => f._audio ? "" : `<div class="t">${f.type.startsWith("image/") ? `<img src="${f._url}" alt="">` : "Video"}
     <button onclick="removePostFile(${i})" aria-label="Remove">✕</button></div>`).join("");
+  let n = 0;
+  const tracks = files.map((f, i) => f._audio ? `<div class="te"><span class="te-n">${++n}.</span>${pix("music")}
+    <input class="input" value="${esc(f._title)}" maxlength="120" aria-label="Track title" oninput="state.pc.files[${i}]._title=this.value">
+    <span class="muted small">${(f.size / 1048576).toFixed(1)} MB</span>
+    <button class="btn btn-sm" onclick="removePostFile(${i})" aria-label="Remove">✕</button></div>` : "").join("");
+  const hint = n ? `<div class="te-hint muted small">Music post: tracks play in this order. Add one picture to use as the cover.</div>` : "";
+  return pics + tracks + hint;
 }
 function addPostFiles(input) {
   for (const f of input.files) {
-    if (state.pc.files.length >= 10) { toast("Up to 10 files per post"); break; }
+    if (state.pc.files.length >= 11) { toast("That's the most files one post can have"); break; }
+    if (f.size > 100 * 1024 * 1024) { toast(`${f.name} is over 100 MB`); continue; }
     f._url = URL.createObjectURL(f);
+    f._audio = isAudioFile(f);
+    if (f._audio) f._title = f.name.replace(/\.[^.]+$/, "");
     state.pc.files.push(f);
   }
   input.value = "";
+  const cat = document.getElementById("pc-cat");
+  if (state.pc.files.some((f) => f._audio) && cat && !cat.value) cat.value = "music";
   document.getElementById("pc-thumbs").innerHTML = renderThumbs();
 }
 function removePostFile(i) { state.pc.files.splice(i, 1); document.getElementById("pc-thumbs").innerHTML = renderThumbs(); }
@@ -557,8 +592,9 @@ async function submitPost() {
   fd.append("mood", document.getElementById("pc-mood").value);
   fd.append("music", document.getElementById("pc-music").value.trim());
   state.pc.files.forEach((f) => fd.append("media", f));
+  fd.append("track_titles", JSON.stringify(state.pc.files.filter((f) => f._audio).map((f) => f._title || "")));
   try {
-    await api("/posts", { method: "POST", form: fd });
+    await apiUpload("/posts", fd, (pct) => { btn.textContent = pct < 100 ? `Uploading ${pct}%...` : "Saving..."; });
     state.pc.files = [];
     toast("Posted!", true);
     await Promise.all([loadPosts(true), loadRecent()]); render();
@@ -615,8 +651,88 @@ function renderAlbum(p, media) {
   </div>`;
 }
 
+const isAudio = (u) => /\.(mp3|m4a|aac|wav|ogg|oga|flac|aif|aiff)(\?|$)/i.test(u);
+function trackTitles(p) { try { const t = JSON.parse(p.tracks || "[]"); return Array.isArray(t) ? t : []; } catch { return []; } }
+
+// "JoshAmp": a little Winamp-style player for music posts
+function renderPlayer(p, audio, cover) {
+  const titles = trackTitles(p);
+  const tracks = audio.map((u, i) => ({ src: src(u), title: titles[i] || (audio.length === 1 && p.title) || `Track ${i + 1}` }));
+  return `<div class="amp" data-tracks="${esc(JSON.stringify(tracks))}" data-i="0">
+    <div class="amp-bar"><span>JOSHAMP</span></div>
+    <div class="amp-body">
+      <div class="amp-cover">${cover ? `<img src="${esc(src(cover))}" alt="Cover" onclick="openViewer('${esc(src(cover))}')">` : `<span class="amp-cd"></span>`}</div>
+      <div class="amp-main">
+        <div class="amp-lcd">
+          <div class="amp-row"><span class="amp-state">■</span><span class="amp-time">00:00</span>
+            <span class="amp-viz">${"<i></i>".repeat(9)}</span></div>
+          <div class="amp-ticker"><span>1. ${esc(tracks[0].title)}</span></div>
+        </div>
+        <input class="amp-seek" type="range" min="0" max="1000" value="0" aria-label="Seek" oninput="ampSeek(this)">
+        <div class="amp-ctrls">
+          <button class="amp-btn" onclick="ampStep(this, -1)" aria-label="Previous track">|◀</button>
+          <button class="amp-btn" onclick="ampPlay(this)" aria-label="Play">▶</button>
+          <button class="amp-btn" onclick="ampPause(this)" aria-label="Pause">❚❚</button>
+          <button class="amp-btn" onclick="ampStop(this)" aria-label="Stop">■</button>
+          <button class="amp-btn" onclick="ampStep(this, 1)" aria-label="Next track">▶|</button>
+          <input class="amp-vol" type="range" min="0" max="100" value="80" aria-label="Volume" oninput="ampVol(this)">
+        </div>
+      </div>
+    </div>
+    ${tracks.length > 1 ? `<ol class="amp-list">${tracks.map((t, i) => `<li class="${i ? "" : "on"}" onclick="ampTrack(this, ${i})"><span>${i + 1}. ${esc(t.title)}</span><span class="d"></span></li>`).join("")}</ol>` : ""}
+    <audio preload="metadata" src="${esc(tracks[0].src)}"></audio>
+  </div>`;
+}
+const ampOf = (el) => el.closest(".amp");
+function ampTracks(root) { try { return JSON.parse(root.dataset.tracks); } catch { return []; } }
+function ampLoad(root, i) {
+  const tracks = ampTracks(root);
+  i = (i + tracks.length) % tracks.length;
+  root.dataset.i = i;
+  const a = root.querySelector("audio");
+  a.src = tracks[i].src;
+  root.querySelector(".amp-ticker span").textContent = `${i + 1}. ${tracks[i].title}`;
+  root.querySelectorAll(".amp-list li").forEach((li, j) => li.classList.toggle("on", j === i));
+  root.querySelector(".amp-seek").value = 0;
+  root.querySelector(".amp-time").textContent = "00:00";
+}
+function ampPlay(btn) {
+  const root = ampOf(btn), a = root.querySelector("audio");
+  document.querySelectorAll(".amp audio").forEach((o) => { if (o !== a) o.pause(); });
+  a.play().catch(() => toast("Couldn't play this track"));
+}
+function ampPause(btn) { ampOf(btn).querySelector("audio").pause(); }
+function ampStop(btn) { const a = ampOf(btn).querySelector("audio"); a.pause(); a.currentTime = 0; }
+function ampStep(btn, d) { const root = ampOf(btn); ampLoad(root, Number(root.dataset.i) + d); ampPlay(btn); }
+function ampTrack(li, i) { const root = ampOf(li); ampLoad(root, i); ampPlay(li); }
+function ampSeek(r) { const a = ampOf(r).querySelector("audio"); if (a.duration) a.currentTime = (r.value / 1000) * a.duration; }
+function ampVol(r) { ampOf(r).querySelector("audio").volume = r.value / 100; }
+const mmss = (t) => `${pad2(Math.floor(t / 60))}:${pad2(Math.floor(t % 60))}`;
+// Media events don't bubble, so listen in the capture phase for every player on the page
+document.addEventListener("timeupdate", (e) => {
+  const root = e.target.closest?.(".amp"); if (!root) return;
+  const a = e.target;
+  root.querySelector(".amp-time").textContent = mmss(a.currentTime);
+  if (a.duration && document.activeElement !== root.querySelector(".amp-seek")) root.querySelector(".amp-seek").value = Math.round((a.currentTime / a.duration) * 1000);
+}, true);
+document.addEventListener("play", (e) => { const r = e.target.closest?.(".amp"); if (r) { r.classList.add("playing"); r.querySelector(".amp-state").textContent = "▶"; } }, true);
+document.addEventListener("pause", (e) => { const r = e.target.closest?.(".amp"); if (r) { r.classList.remove("playing"); r.querySelector(".amp-state").textContent = e.target.currentTime ? "❚❚" : "■"; } }, true);
+document.addEventListener("loadedmetadata", (e) => {
+  const r = e.target.closest?.(".amp"); if (!r) return;
+  const d = r.querySelectorAll(".amp-list li .d")[Number(r.dataset.i)];
+  if (d && isFinite(e.target.duration)) d.textContent = mmss(e.target.duration);
+}, true);
+document.addEventListener("ended", (e) => {
+  const r = e.target.closest?.(".amp"); if (!r) return;
+  const i = Number(r.dataset.i), n = ampTracks(r).length;
+  if (i + 1 < n) { ampLoad(r, i + 1); ampPlay(r.querySelector(".amp-btn")); }
+  else { ampLoad(r, 0); r.querySelector(".amp-state").textContent = "■"; }
+}, true);
+
 function renderPost(p, full = false) {
   const media = mediaList(p).filter((u) => !embedHtml(u));
+  const audio = media.filter(isAudio);
+  const pics = media.filter((u) => !isAudio(u));
   const embed = firstEmbed(p);
   const cat = p.category ? `<a class="cat-tag cat-${p.category}" href="#/${p.category}">${pix(p.category)}${CATS[p.category]}</a>` : "";
   const title = p.title ? `<h3 class="entry-title"><a href="#/post/${p.id}">${esc(p.title)}</a></h3>` : "";
@@ -624,12 +740,12 @@ function renderPost(p, full = false) {
   const music = p.music ? `<div class="meta-line"><b>current music:</b> ♫ ${esc(p.music)}</div>` : "";
   const comments = p.comment_count ? `${p.comment_count} comment${p.comment_count === 1 ? "" : "s"}` : "post a comment";
   return `<article class="entry post" id="p${p.id}">
-    <div class="entry-head">${joshPic("sm")}<div class="who">${uicon}<b>josh</b> ${joshBadge()}
+    <div class="entry-head">${joshPic("sm")}<div class="who">${uicon}<b>${esc(state.config.about?.username || "josh")}</b>
       ${isNew(p.created_at) ? `<img src="img/new.gif" alt="new" class="new">` : ""}</div>
       ${cat}<button class="link-btn" onclick="postMenu(${p.id})" aria-label="Post options">[options]</button></div>
     ${title}
     ${p.body ? `<div class="entry-body">${linkify(p.body)}</div>` : ""}
-    ${media.length ? renderAlbum(p, media) : ""}
+    ${audio.length ? renderPlayer(p, audio, pics[0]) : media.length ? renderAlbum(p, media) : ""}
     ${downloadButton(p)}${embed}
     ${mood || music ? `<div class="meta">${mood}${music}</div>` : ""}
     <div class="entry-foot">posted by <b>Josh</b> @ <a href="#/post/${p.id}">${esc(fmtTime(p.created_at))}</a>
@@ -914,6 +1030,7 @@ function renderProfile() {
   if (isMe) actions.push(`<a class="act" href="#/settings">${pix("settings")} Edit my profile</a>`);
   else if (p.friend_status === "friends") actions.push(`<button class="act" onclick="openDM(${p.id})">${pix("chats")} Send Message</button>`,
     `<button class="act" onclick="unfriend(${p.id})">${pix("logout")} Remove from Friends</button>`);
+  if (p.can_message && p.friend_status !== "friends") actions.unshift(`<button class="act" onclick="openDM(${p.id})">${pix("chats")} Send Message</button>`);
   else if (p.friend_status === "sent") actions.push(`<span class="act muted">${pix("friends")} Friend request sent</span>`);
   else if (p.friend_status === "pending" && p.request_id) actions.push(`<button class="act" onclick="acceptFriend(${p.request_id})">${pix("friends")} Accept friend request</button>`,
     `<button class="act" onclick="rejectFriend(${p.request_id})">${pix("logout")} Decline request</button>`);
@@ -975,6 +1092,10 @@ async function unfriend(id) {
   if (!confirm("Remove this friend?")) return;
   await api(`/friends/${id}`, { method: "DELETE" });
   await reloadProfile();
+}
+function messageJosh() {
+  if (needAccount("message Josh")) return;
+  openDM(state.config.about.id);
 }
 async function openDM(userId) {
   const r = await api(`/chats/direct/${userId}`, { method: "POST" });
@@ -1055,12 +1176,14 @@ function renderChats() {
           ${c.unread ? `<span class="count">${c.unread}</span>` : ""}</span></a>`).join("") || `<div class="empty small">No chats yet. Add friends, then send them an IM!</div>`}
       </div>
       <div class="win-buttons"><button class="btn btn-primary" onclick="newChat()">${pix("chats")} New IM</button><a class="btn" href="#/friends">${pix("friends")} Friends</a></div>
-      <div class="notice small">Chats are with friends only. Messages are scanned automatically for rule-breaking content and may be reviewed by Josh. <a href="#/rules">Rules</a></div>
+      <div class="notice small">Chats are with friends (and anyone can message Josh). Messages are scanned automatically for rule-breaking content and may be reviewed by Josh. <a href="#/rules">Rules</a></div>
     </div></div>`;
 }
 
 async function newChat() {
   const friends = await api("/friends");
+  const josh = state.config.about;
+  if (josh?.id && josh.id !== state.me.id && !friends.some((f) => f.id === josh.id)) friends.unshift({ ...josh, display_name: (josh.display_name || josh.username) + " (Josh)" });
   if (!friends.length) { toast("Add some friends first"); nav("#/friends"); return; }
   modal(`<h3>New Instant Message</h3><p class="small" style="margin-bottom:6px">Pick one friend for a 1-on-1 IM, or a few for a group chat.</p>
     <fieldset><legend>Friends</legend>

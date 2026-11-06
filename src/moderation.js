@@ -158,6 +158,21 @@ export function sniffImage(buf) {
   return null;
 }
 
+/** Recognise music files by their first bytes. Returns a file extension or null. */
+export function sniffAudio(buf, clientMime = "") {
+  if (!buf || buf.length < 12) return null;
+  const ascii = (a, b) => buf.slice(a, b).toString("latin1");
+  if (ascii(0, 3) === "ID3") return "mp3";
+  if (ascii(0, 4) === "RIFF" && ascii(8, 12) === "WAVE") return "wav";
+  if (ascii(0, 4) === "OggS") return "ogg";
+  if (ascii(0, 4) === "fLaC") return "flac";
+  if (ascii(0, 4) === "FORM" && /^AIF[FC]$/.test(ascii(8, 12))) return "aiff";
+  if (ascii(4, 8) === "ftyp" && (/^M4[AB] /.test(ascii(8, 12)) || String(clientMime).startsWith("audio/"))) return "m4a";
+  if (buf[0] === 0xff && (buf[1] & 0xf6) === 0xf0) return "aac"; // ADTS AAC
+  if (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) return "mp3"; // MPEG audio frame
+  return null;
+}
+
 export function validGifUrl(url) {
   return /^https:\/\/(?:media\d*|i)\.giphy\.com\/[\w\-./]+\.(?:gif|webp)(?:\?[\w=&.-]*)?$/i.test(String(url || ""));
 }
