@@ -234,9 +234,11 @@ a:hover .pix, button:hover .pix, label:hover .pix, .tab.on .pix, .lb.on .pix { a
 .amp.playing .amp-viz i:nth-child(3n) { animation-duration: 0.65s; animation-delay: -0.2s; }
 .amp.playing .amp-viz i:nth-child(4n+1) { animation-duration: 0.45s; animation-delay: -0.3s; }
 @keyframes viz { from { height: 2px; } to { height: 18px; } }
-.amp-ticker { margin-top: 3px; overflow: hidden; white-space: nowrap; }
-.amp-ticker span { display: inline-block; padding-left: 100%; animation: tick 14s steps(140) infinite; }
-@keyframes tick { to { transform: translateX(-100%); } }
+/* The title scrolls across the LCD. The span is taken out of the flow so a long title can never
+   make the player (and the page) wider than the screen, which Safari did with the old padding trick. */
+.amp-ticker { position: relative; height: 15px; margin-top: 3px; overflow: hidden; white-space: nowrap; }
+.amp-ticker span { position: absolute; top: 0; left: 100%; animation: tick 14s steps(140) infinite; }
+@keyframes tick { to { left: 0; transform: translateX(-100%); } }
 .amp-ctrls { display: flex; align-items: center; gap: 2px; }
 .amp-btn { width: 28px; height: 19px; padding: 0; border: 0; background: #cccccc; box-shadow: var(--raised); color: #000000; font: 9px/19px Verdana, sans-serif; }
 .amp-btn:active { box-shadow: var(--pressed); }
@@ -508,7 +510,8 @@ a:hover .av, .av:hover { animation: frame 0.5s steps(1) infinite; }
   .tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; padding: 6px; }
   .tab { justify-content: center; gap: 4px; padding: 8px 2px; border-radius: 3px; border-bottom: 1px solid #000000; font-size: 11px; white-space: nowrap; }
   .tab .count { top: -4px; right: -2px; }
-  .cols { flex-direction: column; gap: 0; padding: 10px; }
+  .cols { flex-direction: column; align-items: stretch; gap: 0; padding: 10px; }
+  .main { width: 100%; }
   .side { width: 100%; margin-top: 8px; }
   .entry { padding: 10px; }
   .fs-title { margin: -10px -10px 8px; }
