@@ -526,7 +526,7 @@ function siteName(host) {
   const parts = host.replace(/^www\./, "").split(".");
   let i = parts.length - 2;
   if (i > 0 && parts[i].length <= 3 && parts[i + 1].length <= 2) i--;
-  return (parts[Math.max(i, 0)] || host).slice(0, 14);
+  return (parts[Math.max(i, 0)] || host).slice(0, 20);
 }
 function linkCard(url, label = "", sub = "") {
   let host = "", where = "";
@@ -737,15 +737,23 @@ function renderFeed() {
 
 function renderAlbum(p, media) {
   const multi = media.length > 1;
-  const slides = media.map((u) => `<div class="slide">${isVideo(u)
+  const slides = media.map((u, i) => `<div class="slide">${isVideo(u)
     ? `<video src="${esc(src(u))}" controls playsinline preload="metadata"></video>`
-    : `<img src="${esc(src(u))}" alt="" loading="lazy" onclick="event.stopPropagation();openViewer('${esc(src(u))}')" title="Click to enlarge">`}</div>`).join("");
+    : `<img src="${esc(src(u))}" alt="" loading="lazy" ${multi && i === 0 ? `onload="albumFit(this)"` : ""} onclick="event.stopPropagation();openViewer('${esc(src(u))}')" title="Click to enlarge">`}</div>`).join("");
   return `<div class="album ${multi ? "multi" : ""}">
     <div class="album-frame"><div class="carousel" onscroll="carouselScroll(this)">${slides}</div></div>
     ${multi ? `<div class="album-nav"><button class="btn btn-sm" onclick="albumStep(this, -1)">« prev</button>
       <span>picture <b class="slide-count">1</b> of ${media.length}</span>
       <button class="btn btn-sm" onclick="albumStep(this, 1)">next »</button></div>` : ""}
   </div>`;
+}
+
+// A multi-picture album takes the shape of its first picture (between 4:5 portrait and 16:9 wide),
+// so desktop screenshots aren't boxed into the tall frame meant for phone screenshots and art.
+function albumFit(img) {
+  if (!img.naturalWidth || !img.naturalHeight) return;
+  const r = Math.min(16 / 9, Math.max(4 / 5, img.naturalWidth / img.naturalHeight));
+  img.closest(".album")?.style.setProperty("--album-ar", r.toFixed(3));
 }
 
 const isAudio = (u) => /\.(mp3|m4a|aac|wav|ogg|oga|flac|aif|aiff)(\?|$)/i.test(u);
