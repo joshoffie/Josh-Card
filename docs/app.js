@@ -831,7 +831,8 @@ function renderPost(p, full = false, pin = null) {
   const audio = media.filter(isAudio);
   const pics = media.filter((u) => !isAudio(u));
   const embed = firstEmbed(p, pin?.tall || 0);
-  const cat = p.category ? `<a class="cat-tag cat-${p.category}" href="#/${p.category}">${pix(p.category)}${CATS[p.category]}</a>` : "";
+  // The section tag only shows where posts from different sections mix (Home, a single post page)
+  const cat = p.category && p.category !== currentCategory() ? `<a class="cat-tag cat-${p.category}" href="#/${p.category}">${pix(p.category)}${CATS[p.category]}</a>` : "";
   const title = p.title ? `<h3 class="entry-title"><a href="#/post/${p.id}">${esc(p.title)}</a></h3>` : "";
   const mood = p.mood ? `<div class="meta-line"><b>current mood:</b> <img src="img/mood-${esc(p.mood)}.gif" alt="" width="15" height="15"> ${esc(p.mood)}</div>` : "";
   const music = p.music ? `<div class="meta-line"><b>current music:</b> ♫ ${esc(p.music)}</div>` : "";
